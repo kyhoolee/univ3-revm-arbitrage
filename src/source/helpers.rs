@@ -60,6 +60,30 @@ pub fn build_tx(to: Address, from: Address, calldata: Bytes, base_fee: u128) -> 
         .into()
 }
 
+pub fn build_tx_avalanche(
+    to: Address, 
+    from: Address, 
+    calldata: Bytes, 
+    base_fee: u128, 
+    chain_id: Option<u64> // Use Option for default handling
+) -> TransactionRequest {
+    // Use chain_id or fallback to Avalanche's default chain ID
+    let chain_id = chain_id.unwrap_or(43114); // Avalanche C-Chain ID
+    
+    TransactionRequest::default()
+        .to(to)
+        .from(from)
+        .with_input(calldata)
+        .nonce(0)
+        .gas_limit(1000000)
+        .max_fee_per_gas(base_fee)
+        .max_priority_fee_per_gas(0)
+        .with_chain_id(chain_id) // Use Avalanche's chain ID (43114)
+        .build_unsigned()
+        .unwrap()
+        .into()
+}
+
 pub type AlloyCacheDB = CacheDB<AlloyDB<Http<Client>, Ethereum, Arc<RootProvider<Http<Client>>>>>;
 
 pub fn revm_call(
