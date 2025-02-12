@@ -28,9 +28,12 @@ async fn main() -> Result<()> {
     let calldata = quote_calldata(WETH_ADDR, USDC_ADDR, volume, 3000);
 
     let tx = build_tx(V3_QUOTER_ADDR, ME, calldata, base_fee);
+    println!("tx: {:?}", tx);
+
     let start = measure_start("eth_call_one");
     let call = provider.call(&tx).await?;
-
+    println!("call: {:?}", call);   
+    
     let amount_out = decode_quote_response(call)?;
     println!("{} WETH -> USDC {}", volume, amount_out);
 

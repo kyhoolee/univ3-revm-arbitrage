@@ -90,3 +90,60 @@ pub fn quote_calldata(token_in: Address, token_out: Address, amount_in: U256, fe
 
     Bytes::from(quoteExactInputSingleCall { params }.abi_encode())
 }
+
+
+
+
+sol! {
+    struct QuoteExactInputParams {
+        bytes path;
+        uint256 amountIn;
+    }
+
+    function quoteExactInput(QuoteExactInputParams memory params)
+    public
+    returns (
+        uint256 amountOut,
+        uint160[] memory sqrtPriceX96AfterList,
+        uint32[] memory initializedTicksCrossedList,
+        uint256 gasEstimate
+    );
+}
+
+pub fn encode_path(tokens: &[Address], fees: &[U24]) -> Bytes {
+    assert!(tokens.len() == fees.len() + 1, "Path length mismatch between tokens and fees");
+
+    let mut path = Vec::new();
+    for i in 0..fees.len() {
+        path.extend_from_slice(tokens[i].as_ref());
+        let fee_bytes: [u8; 3] = fees[i].to_be_bytes::<3>(); // Explicitly specifying size
+        path.extend_from_slice(&fee_bytes);
+    }
+    path.extend_from_slice(tokens.last().unwrap().as_ref());
+    Bytes::from(path)
+}
+
+pub fn quote_exact_input_calldata(tokens: &[Address], fees: &[U24], amount_in: U256) -> Bytes {
+    let path = encode_path(tokens, fees);
+    let params = QuoteExactInputParams {
+        path,
+        amountIn: amount_in,
+    };
+
+    Bytes::from(quoteExactInputCall { params }.abi_encode())
+}
+
+pub fn quote_exact_input_single_calldata(
+    token_in: Address,
+    token_out: Address,
+    amount_in: U256,
+    fee: u32,
+) -> Bytes {
+    let path = encode_path(&[token_in, token_out], &[U24::from(fee)]);
+    let params = QuoteExactInputParams {
+        path,
+        amountIn: amount_in,
+    };
+
+    Bytes::from(quoteExactInputCall { params }.abi_encode())
+}

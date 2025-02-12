@@ -11,7 +11,8 @@ use std::ops::Div;
 use alloy::primitives::{address, Address};
 
 use crate::source::{
-    decode_quote_response, measure_end, measure_start, quote_calldata, ME, ONE_ETHER
+    decode_quote_response, measure_end, measure_start, quote_calldata, ME, ONE_ETHER,
+    quote_exact_input_single_calldata
 };
 
 #[tokio::main]
@@ -42,7 +43,8 @@ async fn main() -> Result<()> {
     let quoter_address: Address = address!("84ab2f9fdc4bf66312b0819d879437b8749efdf2"); // Quoter
 
     // let calldata = quote_calldata(WETH_ADDR, USDC_ADDR, volume, 3000);
-    let calldata = quote_calldata(token_in, token_out, volume, 10);
+    // let calldata = quote_calldata(token_in, token_out, volume, 3000);
+    let calldata = quote_exact_input_single_calldata(token_in, token_out, volume, 3000);
 
     // let tx = build_tx(quoterAddress, ME, calldata, base_fee);
     let chain_id = 2020;
