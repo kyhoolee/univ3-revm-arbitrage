@@ -1,6 +1,7 @@
 use alloy::{
     primitives::U256,
     providers::{Provider, ProviderBuilder},
+    transports::http::reqwest::Url,
 };
 use std::sync::Arc;
 pub mod source;
@@ -16,7 +17,9 @@ use crate::source::{
 async fn main() -> Result<()> {
     env_logger::init();
 
-    let provider = ProviderBuilder::new().on_http(std::env::var("ETH_RPC_URL").unwrap().parse()?);
+    let rpc = "https://eth.merkle.io";
+
+    let provider = ProviderBuilder::new().on_http(Url::parse(rpc)?);
     let provider = Arc::new(provider);
 
     let base_fee = provider.get_gas_price().await?;

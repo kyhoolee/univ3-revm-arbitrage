@@ -21,6 +21,19 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
 
+
+// use web3::types::H160;
+// use web3::helpers::to_checksum;
+
+// /// Converts a lowercase Ethereum address to a checksummed address (EIP-55).
+// pub fn to_checksum_address(address: &str) -> Result<String, String> {
+//     // Parse the input string into an H160 Ethereum address
+//     match address.parse::<H160>() {
+//         Ok(h160_address) => Ok(to_checksum(&h160_address, None)),
+//         Err(_) => Err("Invalid Ethereum address format".to_string()),
+//     }
+// }
+
 pub fn measure_start(label: &str) -> (String, Instant) {
     (label.to_string(), Instant::now())
 }
@@ -79,6 +92,30 @@ pub fn build_tx_avalanche(
         .max_fee_per_gas(base_fee)
         .max_priority_fee_per_gas(0)
         .with_chain_id(chain_id) // Use Avalanche's chain ID (43114)
+        .build_unsigned()
+        .unwrap()
+        .into()
+}
+
+pub fn build_tx_ronin(
+    to: Address, 
+    from: Address, 
+    calldata: Bytes, 
+    base_fee: u128, 
+    chain_id: Option<u64> // Use Option for default handling
+) -> TransactionRequest {
+    // Use chain_id or fallback to Avalanche's default chain ID
+    let chain_id = chain_id.unwrap_or(2020); // Ronin
+    
+    TransactionRequest::default()
+        .to(to)
+        .from(from)
+        .with_input(calldata)
+        .nonce(0)
+        .gas_limit(1000000)
+        .max_fee_per_gas(base_fee)
+        .max_priority_fee_per_gas(0)
+        .with_chain_id(chain_id) // Ronin
         .build_unsigned()
         .unwrap()
         .into()
