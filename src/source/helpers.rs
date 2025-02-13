@@ -89,7 +89,7 @@ pub fn build_tx_avalanche(
         .with_input(calldata)
         .nonce(0)
         .gas_limit(1000000)
-        .max_fee_per_gas(base_fee)
+        .max_fee_per_gas(10*base_fee)
         .max_priority_fee_per_gas(0)
         .with_chain_id(chain_id) // Use Avalanche's chain ID (43114)
         .build_unsigned()
@@ -105,17 +105,17 @@ pub fn build_tx_ronin(
     chain_id: Option<u64> // Use Option for default handling
 ) -> TransactionRequest {
     // Use chain_id or fallback to Avalanche's default chain ID
-    let chain_id = chain_id.unwrap_or(2020); // Ronin
+    // let chain_id = chain_id.unwrap_or(2020); // Ronin
     
     TransactionRequest::default()
         .to(to)
         .from(from)
         .with_input(calldata)
         .nonce(0)
-        .gas_limit(1000000)
-        .max_fee_per_gas(base_fee)
+        .gas_limit(1_000_000)
+        .max_fee_per_gas(1*base_fee)
         .max_priority_fee_per_gas(0)
-        .with_chain_id(chain_id) // Ronin
+        // .with_chain_id(chain_id) // Ronin
         .build_unsigned()
         .unwrap()
         .into()

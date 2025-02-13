@@ -95,12 +95,10 @@ pub fn quote_calldata(token_in: Address, token_out: Address, amount_in: U256, fe
 
 
 sol! {
-    struct QuoteExactInputParams {
-        bytes path;
-        uint256 amountIn;
-    }
-
-    function quoteExactInput(QuoteExactInputParams memory params)
+    function quoteExactInput(
+        bytes path,
+        uint256 amountIn
+    )
     public
     returns (
         uint256 amountOut,
@@ -123,14 +121,25 @@ pub fn encode_path(tokens: &[Address], fees: &[U24]) -> Bytes {
     Bytes::from(path)
 }
 
+
+use std::fmt;
+
+pub struct PrettyBytes(pub Bytes);
+
+impl fmt::Display for PrettyBytes {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for byte in self.0.iter() {
+            write!(f, "{:02x} ", byte)?;
+        }
+        Ok(())
+    }
+}
+
 pub fn quote_exact_input_calldata(tokens: &[Address], fees: &[U24], amount_in: U256) -> Bytes {
     let path = encode_path(tokens, fees);
-    let params = QuoteExactInputParams {
+    Bytes::from(quoteExactInputCall {
         path,
-        amountIn: amount_in,
-    };
-
-    Bytes::from(quoteExactInputCall { params }.abi_encode())
+        amountIn: amount_in, }.abi_encode())
 }
 
 pub fn quote_exact_input_single_calldata(
@@ -140,10 +149,11 @@ pub fn quote_exact_input_single_calldata(
     fee: u32,
 ) -> Bytes {
     let path = encode_path(&[token_in, token_out], &[U24::from(fee)]);
-    let params = QuoteExactInputParams {
+    let pretty = PrettyBytes(path.clone());
+    println!("{}", pretty);
+    let encoded = quoteExactInputCall {
         path,
-        amountIn: amount_in,
-    };
-
-    Bytes::from(quoteExactInputCall { params }.abi_encode())
+        amountIn: amount_in }.abi_encode();
+    println!("encoded: {:?}", encoded.clone());
+    Bytes::from(encoded)
 }

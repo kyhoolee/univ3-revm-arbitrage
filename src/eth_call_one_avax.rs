@@ -7,7 +7,7 @@ use std::sync::Arc;
 pub mod source;
 use anyhow::Result;
 use std::ops::Div;
-
+use alloy::eips::BlockId;
 use alloy::primitives::{address, Address};
 
 use crate::source::{
@@ -42,9 +42,11 @@ async fn main() -> Result<()> {
     let chain_id = 43114;
     let tx = build_tx_avalanche(quoter_address, ME, calldata, base_fee, Some(chain_id));
     let start = measure_start("eth_call_one");
-    println!("tx: {:?}", tx);
-    let call = provider.call(&tx).await?;
-    println!("call: {:?}", call);   
+    println!("\ntx: {:?}", tx);
+    let call = provider.call(&tx).block(BlockId::latest());
+    println!("\ncall: {:?}", call);
+    let call = call.await?;
+    println!("\ncall: {:?}", call);
     let amount_out = decode_quote_response(call)?;
     println!("{} WAVAX -> USDC {}", volume, amount_out);
     // println!("{} WETH -> USDC {}", volume, amount_out);

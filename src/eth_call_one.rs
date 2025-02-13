@@ -7,7 +7,7 @@ use std::sync::Arc;
 pub mod source;
 use anyhow::Result;
 use std::ops::Div;
-
+use alloy::eips::BlockId;
 use crate::source::{
     build_tx, decode_quote_response, measure_end, measure_start, quote_calldata, ME, ONE_ETHER,
     USDC_ADDR, V3_QUOTER_ADDR, WETH_ADDR,
@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
     println!("tx: {:?}", tx);
 
     let start = measure_start("eth_call_one");
-    let call = provider.call(&tx).await?;
+    let call = provider.call(&tx).block(BlockId::latest()).await?;
     println!("call: {:?}", call);   
     
     let amount_out = decode_quote_response(call)?;
