@@ -1,4 +1,4 @@
-pub mod source;
+// pub mod source;
 use alloy::{
     primitives::{Bytes, U256},
     providers::ProviderBuilder,
@@ -8,11 +8,8 @@ use revm::primitives::Bytecode;
 use std::sync::Arc;
 use std::{ops::Div, str::FromStr};
 
-use crate::source::{
-    decode_quote_response, init_account, init_account_with_bytecode, init_cache_db,
-    insert_mapping_storage_slot, measure_end, measure_start, quote_calldata, revm_call, volumes,
-    ME, ONE_ETHER, USDC_ADDR, V3_POOL_3000_ADDR, V3_QUOTER_ADDR, WETH_ADDR,
-};
+use univ3_revm_arbitrage::source::*;
+use univ3_revm_arbitrage::chain::eth::*;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -28,7 +25,7 @@ async fn main() -> Result<()> {
 
     init_account(V3_QUOTER_ADDR, &mut cache_db, provider.clone()).await?;
     init_account(V3_POOL_3000_ADDR, &mut cache_db, provider.clone()).await?;
-    let mocked_erc20 = include_str!("bytecode/generic_erc20.hex");
+    let mocked_erc20 = include_str!("../bytecode/generic_erc20.hex");
     let mocked_erc20 = Bytes::from_str(mocked_erc20).unwrap();
     let mocked_erc20 = Bytecode::new_raw(mocked_erc20);
 

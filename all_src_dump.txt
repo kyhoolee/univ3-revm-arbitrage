@@ -1,0 +1,1221 @@
+
+==================== src/anvil.rs ====================
+use alloy::{
+    node_bindings::Anvil,
+    primitives::U256,
+    providers::{Provider, ProviderBuilder},
+    transports::http::reqwest::Url,
+};
+use std::sync::Arc;
+pub mod source;
+use anyhow::Result;
+use std::ops::Div;
+
+use crate::source::{
+    build_tx, decode_quote_response, measure_end, measure_start, quote_calldata, volumes, ME,
+    ONE_ETHER, USDC_ADDR, V3_QUOTER_ADDR, WETH_ADDR,
+};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    env_logger::init();
+
+    let rpc_url: Url = std::env::var("ETH_RPC_URL").unwrap().parse()?;
+
+    let provider = ProviderBuilder::new().on_http(rpc_url.clone());
+    let provider = Arc::new(provider);
+
+    let base_fee = provider.get_gas_price().await?;
+
+    let fork_block = provider.get_block_number().await?;
+    let anvil = Anvil::new()
+        .fork(rpc_url)
+        .fork_block_number(fork_block)
+        .block_time(1_u64)
+        .spawn();
+
+    let anvil_provider = ProviderBuilder::new().on_http(anvil.endpoint().parse().unwrap());
+    let anvil_provider = Arc::new(anvil_provider);
+
+    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
+
+    let start = measure_start("anvil_first");
+    let first_volume = volumes[0];
+    let calldata = quote_calldata(WETH_ADDR, USDC_ADDR, first_volume, 3000);
+    let tx = build_tx(V3_QUOTER_ADDR, ME, calldata, base_fee);
+    let response = anvil_provider.call(&tx).await?;
+    let amount_out = decode_quote_response(response)?;
+    println!("{} WETH -> USDC {}", first_volume, amount_out);
+    measure_end(start);
+
+    let start = measure_start("anvil");
+    for (index, volume) in volumes.into_iter().enumerate() {
+        let calldata = quote_calldata(WETH_ADDR, USDC_ADDR, volume, 3000);
+        let tx = build_tx(V3_QUOTER_ADDR, ME, calldata, base_fee);
+        let response = anvil_provider.call(&tx).await?;
+        let amount_out = decode_quote_response(response)?;
+        if index % 20 == 0 {
+            println!("{} WETH -> USDC {}", volume, amount_out);
+        }
+    }
+
+    measure_end(start);
+    drop(anvil);
+
+    Ok(())
+}
+
+
+
+==================== src/eth_call_one_avax.rs ====================
+use alloy::{
+    primitives::U256,
+    providers::{Provider, ProviderBuilder}, transports::http::reqwest::Url,
+};
+use source::build_tx_avalanche;
+use std::sync::Arc;
+pub mod source;
+use anyhow::Result;
+use std::ops::Div;
+use alloy::eips::BlockId;
+use alloy::primitives::{address, Address};
+
+use crate::source::{
+    build_tx, decode_quote_response, measure_end, measure_start, quote_calldata, ME, ONE_ETHER,
+    USDC_ADDR, V3_QUOTER_ADDR, WETH_ADDR,
+};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    env_logger::init();
+
+    // let rpc = std::env::var("ETH_RPC_URL").unwrap().parse()?;
+    // "";
+    // let rpc = "https://eth.merkle.io";
+    let rpc = "https://api.avax.network/ext/bc/C/rpc";
+
+    // let provider = ProviderBuilder::new().on_http(std::env::var("ETH_RPC_URL").unwrap().parse()?);
+    let provider = ProviderBuilder::new().on_http(Url::parse(rpc)?);
+    let provider = Arc::new(provider);
+
+    let base_fee = provider.get_gas_price().await?;
+
+    let volume = ONE_ETHER.div(U256::from(10));
+
+    let token_in: Address = address!("B31f66AA3C1e785363F0875A1B74E27b85FD66c7"); // WAVAX on Avalanche
+    let token_out: Address = address!("B97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E"); // USDC on Avalanche
+    let quoter_address: Address = address!("be0F5544EC67e9B3b2D979aaA43f18Fd87E6257F"); // Quoter on Avalanche
+    // let calldata = quote_calldata(WETH_ADDR, USDC_ADDR, volume, 3000);
+    let calldata = quote_calldata(token_in, token_out, volume, 3000);
+
+    // let tx = build_tx(quoterAddress, ME, calldata, base_fee);
+    let chain_id = 43114;
+    let tx = build_tx_avalanche(quoter_address, ME, calldata, base_fee, Some(chain_id));
+    let start = measure_start("eth_call_one");
+    println!("\ntx: {:?}", tx);
+    let call = provider.call(&tx).block(BlockId::latest());
+    println!("\ncall: {:?}", call);
+    let call = call.await?;
+    println!("\ncall: {:?}", call);
+    let amount_out = decode_quote_response(call)?;
+    println!("{} WAVAX -> USDC {}", volume, amount_out);
+    // println!("{} WETH -> USDC {}", volume, amount_out);
+
+    measure_end(start);
+
+    Ok(())
+}
+
+
+
+==================== src/eth_call_one_ronin.rs ====================
+use alloy::{
+    primitives::U256,
+    providers::{Provider, ProviderBuilder}, transports::http::reqwest::Url,
+};
+use source::build_tx_ronin;
+use std::sync::Arc;
+pub mod source;
+use anyhow::Result;
+use std::ops::Div;
+use alloy::eips::BlockId;
+use alloy::primitives::{address, Address};
+
+use crate::source::{
+    decode_quote_response, measure_end, measure_start, quote_calldata, ME, ONE_ETHER,
+    quote_exact_input_single_calldata
+};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    env_logger::init();
+
+    // let rpc = std::env::var("ETH_RPC_URL").unwrap().parse()?;
+    // "";
+    // ETH_RPC_URL = 'https://ronin.gateway.tenderly.co/7dNLdBPOaPCaNqVx5pZ10s'
+    // QUOTER_ADDRESS = '0x84ab2f9fdc4bf66312b0819d879437b8749efdf2'
+    // let rpc = "https://eth.merkle.io";
+    // let rpc = "https://api.avax.network/ext/bc/C/rpc";
+    // let rpc = "http://10.0.1.50:8745";
+    let rpc = "https://ronin.gateway.tenderly.co/7dNLdBPOaPCaNqVx5pZ10s";
+
+    // let provider = ProviderBuilder::new().on_http(std::env::var("ETH_RPC_URL").unwrap().parse()?);
+    let provider = ProviderBuilder::new().on_http(Url::parse(rpc)?);
+    let provider = Arc::new(provider);
+
+    let base_fee = provider.get_gas_price().await?;
+
+    let volume = ONE_ETHER.div(U256::from(100));
+
+    // # "tokenIn": "0xc99a6A985eD2Cac1ef41640596C5A5f9F4E19Ef5",  # Ronin WETH
+    // # "tokenOut": "0xe514d9DEB7966c8BE0ca922de8a064264eA6bcd4",  # Wrapped Ronin
+
+    let token_in: Address = address!("c99a6A985eD2Cac1ef41640596C5A5f9F4E19Ef5"); // WETH
+    let token_out: Address = address!("e514d9DEB7966c8BE0ca922de8a064264eA6bcd4"); // WRON
+
+    // let token_in: Address = address!("0b7007c13325c48911f73a2dad5fa5dcbf808adc"); // USDC
+    // let token_out: Address = address!("97a9107c1793bc407d6f527b77e7fff4d812bece"); // AXS
+
+
+    let quoter_address: Address = address!("84ab2f9fdc4bf66312b0819d879437b8749efdf2"); // Quoter
+
+    // let calldata = quote_calldata(WETH_ADDR, USDC_ADDR, volume, 3000);
+    // let calldata = quote_calldata(token_in, token_out, volume, 3000);
+    println!("volume: {}", volume);
+    let calldata = quote_exact_input_single_calldata(token_in, token_out, volume, 3000);
+    println!("calldata: {:?}", calldata);
+
+
+    println!("\n---------\nBlock: {}", provider.get_block_number().await?);
+    // Block: 42488999
+    println!("base_fee: {}", base_fee);
+
+    // let tx = build_tx(quoterAddress, ME, calldata, base_fee);
+    let chain_id = 2021;
+    let wallet = address!("ebe94ab981899efbc8bb6cb2b045fc7490726ff3");
+    let tx = build_tx_ronin(quoter_address, ME, calldata, base_fee, Some(chain_id));
+    let start = measure_start("eth_call_one");
+    println!("tx: {:?}", tx);
+    let call = provider.call(&tx).block(BlockId::latest());
+    println!("call: {:?}", call);
+    let call = call.await?;
+    println!("call: {:?}", call);   
+    let amount_out = decode_quote_response(call)?;
+    println!("{} WETH -> WRON {}", volume, amount_out);
+    // println!("{} WETH -> USDC {}", volume, amount_out);
+
+    measure_end(start);
+
+    Ok(())
+}
+
+
+
+==================== src/eth_call_one.rs ====================
+use alloy::{
+    primitives::U256,
+    providers::{Provider, ProviderBuilder},
+    transports::http::reqwest::Url,
+};
+use std::sync::Arc;
+pub mod source;
+use anyhow::Result;
+use std::ops::Div;
+use alloy::eips::BlockId;
+use crate::source::{
+    build_tx, decode_quote_response, measure_end, measure_start, quote_calldata, ME, ONE_ETHER,
+    USDC_ADDR, V3_QUOTER_ADDR, WETH_ADDR,
+};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    env_logger::init();
+
+    let rpc = "https://eth.merkle.io";
+
+    let provider = ProviderBuilder::new().on_http(Url::parse(rpc)?);
+    let provider = Arc::new(provider);
+
+    let base_fee = provider.get_gas_price().await?;
+
+    let volume = ONE_ETHER.div(U256::from(10));
+    let calldata = quote_calldata(WETH_ADDR, USDC_ADDR, volume, 3000);
+
+    let tx = build_tx(V3_QUOTER_ADDR, ME, calldata, base_fee);
+    println!("tx: {:?}", tx);
+
+    let start = measure_start("eth_call_one");
+    let call = provider.call(&tx).block(BlockId::latest()).await?;
+    println!("call: {:?}", call);   
+    
+    let amount_out = decode_quote_response(call)?;
+    println!("{} WETH -> USDC {}", volume, amount_out);
+
+    measure_end(start);
+
+    Ok(())
+}
+
+
+
+==================== src/eth_call.rs ====================
+use alloy::{
+    primitives::U256,
+    providers::{Provider, ProviderBuilder},
+};
+use std::sync::Arc;
+pub mod source;
+use anyhow::Result;
+use std::ops::Div;
+
+use crate::source::{
+    build_tx, decode_quote_response, measure_end, measure_start, quote_calldata, volumes, ME,
+    ONE_ETHER, USDC_ADDR, V3_QUOTER_ADDR, WETH_ADDR,
+};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    env_logger::init();
+
+    let provider = ProviderBuilder::new().on_http(std::env::var("ETH_RPC_URL").unwrap().parse()?);
+    let provider = Arc::new(provider);
+
+    let base_fee = provider.get_gas_price().await?;
+
+    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
+
+    let start = measure_start("eth_call");
+    for (index, volume) in volumes.into_iter().enumerate() {
+        let calldata = quote_calldata(WETH_ADDR, USDC_ADDR, volume, 3000);
+        let tx = build_tx(V3_QUOTER_ADDR, ME, calldata, base_fee);
+        let response = provider.call(&tx).await?;
+        let amount_out = decode_quote_response(response)?;
+        if index % 20 == 0 {
+            println!("{} WETH -> USDC {}", volume, amount_out);
+        }
+    }
+
+    measure_end(start);
+
+    Ok(())
+}
+
+
+
+==================== src/revm_arbitrage.rs ====================
+pub mod source;
+use alloy::{
+    primitives::{Bytes, U256},
+    providers::ProviderBuilder,
+};
+use anyhow::Result;
+use revm::primitives::Bytecode;
+use std::sync::Arc;
+use std::{ops::Div, str::FromStr};
+
+use crate::source::{
+    decode_get_amount_out_response, get_amount_out_calldata, init_account,
+    init_account_with_bytecode, init_cache_db, insert_mapping_storage_slot, revm_revert, volumes,
+    CUSTOM_QUOTER_ADDR, ME, ONE_ETHER, USDC_ADDR, V3_POOL_3000_ADDR, V3_POOL_500_ADDR, WETH_ADDR,
+};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    env_logger::init();
+
+    let provider = ProviderBuilder::new().on_http(std::env::var("ETH_RPC_URL").unwrap().parse()?);
+    let provider = Arc::new(provider);
+
+    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
+
+    let mut cache_db = init_cache_db(provider.clone());
+
+    init_account(ME, &mut cache_db, provider.clone()).await?;
+    init_account(V3_POOL_3000_ADDR, &mut cache_db, provider.clone()).await?;
+    init_account(V3_POOL_500_ADDR, &mut cache_db, provider.clone()).await?;
+    let mocked_erc20 = include_str!("bytecode/generic_erc20.hex");
+    let mocked_erc20 = Bytes::from_str(mocked_erc20).unwrap();
+    let mocked_erc20 = Bytecode::new_raw(mocked_erc20);
+
+    init_account_with_bytecode(WETH_ADDR, mocked_erc20.clone(), &mut cache_db)?;
+    init_account_with_bytecode(USDC_ADDR, mocked_erc20.clone(), &mut cache_db)?;
+
+    let mocked_balance = U256::MAX.div(U256::from(2));
+
+    insert_mapping_storage_slot(
+        WETH_ADDR,
+        U256::ZERO,
+        V3_POOL_3000_ADDR,
+        mocked_balance,
+        &mut cache_db,
+    )?;
+    insert_mapping_storage_slot(
+        USDC_ADDR,
+        U256::ZERO,
+        V3_POOL_3000_ADDR,
+        mocked_balance,
+        &mut cache_db,
+    )?;
+    insert_mapping_storage_slot(
+        WETH_ADDR,
+        U256::ZERO,
+        V3_POOL_500_ADDR,
+        mocked_balance,
+        &mut cache_db,
+    )?;
+    insert_mapping_storage_slot(
+        USDC_ADDR,
+        U256::ZERO,
+        V3_POOL_500_ADDR,
+        mocked_balance,
+        &mut cache_db,
+    )?;
+
+    let mocked_custom_quoter = include_str!("bytecode/uni_v3_quoter.hex");
+    let mocked_custom_quoter = Bytes::from_str(mocked_custom_quoter).unwrap();
+    let mocked_custom_quoter = Bytecode::new_raw(mocked_custom_quoter);
+    init_account_with_bytecode(CUSTOM_QUOTER_ADDR, mocked_custom_quoter, &mut cache_db)?;
+
+    for volume in volumes.into_iter() {
+        let calldata = get_amount_out_calldata(V3_POOL_500_ADDR, WETH_ADDR, USDC_ADDR, volume);
+        let response = revm_revert(ME, CUSTOM_QUOTER_ADDR, calldata, &mut cache_db)?;
+        let usdc_amount_out = decode_get_amount_out_response(response)?;
+        let calldata = get_amount_out_calldata(
+            V3_POOL_3000_ADDR,
+            USDC_ADDR,
+            WETH_ADDR,
+            U256::from(usdc_amount_out),
+        );
+        let response = revm_revert(ME, CUSTOM_QUOTER_ADDR, calldata, &mut cache_db)?;
+        let weth_amount_out = decode_get_amount_out_response(response)?;
+
+        println!(
+            "{} WETH -> USDC {} -> WETH {}",
+            volume, usdc_amount_out, weth_amount_out
+        );
+
+        let weth_amount_out = U256::from(weth_amount_out);
+        if weth_amount_out > volume {
+            let profit = weth_amount_out - volume;
+            println!("WETH profit: {}", profit);
+        } else {
+            println!("No profit.");
+        }
+    }
+
+    Ok(())
+}
+
+
+
+==================== src/revm_cached.rs ====================
+pub mod source;
+use alloy::{
+    primitives::{Bytes, U256},
+    providers::ProviderBuilder,
+};
+use anyhow::Result;
+use revm::primitives::Bytecode;
+use std::sync::Arc;
+use std::{ops::Div, str::FromStr};
+
+use crate::source::{
+    decode_quote_response, init_account, init_account_with_bytecode, init_cache_db,
+    insert_mapping_storage_slot, measure_end, measure_start, quote_calldata, revm_call, volumes,
+    ME, ONE_ETHER, USDC_ADDR, V3_POOL_3000_ADDR, V3_QUOTER_ADDR, WETH_ADDR,
+};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    env_logger::init();
+
+    let provider = ProviderBuilder::new().on_http(std::env::var("ETH_RPC_URL").unwrap().parse()?);
+
+    let provider = Arc::new(provider);
+
+    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
+
+    let mut cache_db = init_cache_db(provider.clone());
+
+    init_account(V3_QUOTER_ADDR, &mut cache_db, provider.clone()).await?;
+    init_account(V3_POOL_3000_ADDR, &mut cache_db, provider.clone()).await?;
+    let mocked_erc20 = include_str!("bytecode/generic_erc20.hex");
+    let mocked_erc20 = Bytes::from_str(mocked_erc20).unwrap();
+    let mocked_erc20 = Bytecode::new_raw(mocked_erc20);
+
+    init_account_with_bytecode(WETH_ADDR, mocked_erc20.clone(), &mut cache_db)?;
+    init_account_with_bytecode(USDC_ADDR, mocked_erc20.clone(), &mut cache_db)?;
+    let mocked_balance = U256::MAX.div(U256::from(2));
+    insert_mapping_storage_slot(
+        WETH_ADDR,
+        U256::ZERO,
+        V3_POOL_3000_ADDR,
+        mocked_balance,
+        &mut cache_db,
+    )?;
+    insert_mapping_storage_slot(
+        USDC_ADDR,
+        U256::ZERO,
+        V3_POOL_3000_ADDR,
+        mocked_balance,
+        &mut cache_db,
+    )?;
+
+    let start = measure_start("revm_cached_first");
+    let first_volume = volumes[0];
+    let calldata = quote_calldata(WETH_ADDR, USDC_ADDR, first_volume, 3000);
+    let response = revm_call(ME, V3_QUOTER_ADDR, calldata, &mut cache_db)?;
+    let amount_out = decode_quote_response(response)?;
+    println!("{} WETH -> USDC {}", first_volume, amount_out);
+    measure_end(start);
+
+    let start = measure_start("revm_cached");
+    for (index, volume) in volumes.into_iter().enumerate() {
+        let calldata = quote_calldata(WETH_ADDR, USDC_ADDR, volume, 3000);
+        let response = revm_call(ME, V3_QUOTER_ADDR, calldata, &mut cache_db)?;
+
+        let amount_out = decode_quote_response(response)?;
+        if index % 20 == 0 {
+            println!("{} WETH -> USDC {}", volume, amount_out);
+        }
+    }
+
+    measure_end(start);
+
+    Ok(())
+}
+
+
+
+==================== src/revm_quoter.rs ====================
+pub mod source;
+use alloy::{
+    primitives::{Bytes, U256},
+    providers::ProviderBuilder,
+};
+use anyhow::Result;
+use revm::primitives::Bytecode;
+use std::sync::Arc;
+use std::{ops::Div, str::FromStr};
+
+use crate::source::{
+    decode_get_amount_out_response, get_amount_out_calldata, init_account,
+    init_account_with_bytecode, init_cache_db, insert_mapping_storage_slot, measure_end,
+    measure_start, revm_revert, volumes, CUSTOM_QUOTER_ADDR, ME, ONE_ETHER, USDC_ADDR,
+    V3_POOL_3000_ADDR, WETH_ADDR,
+};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    env_logger::init();
+
+    let provider = ProviderBuilder::new().on_http(std::env::var("ETH_RPC_URL").unwrap().parse()?);
+    let provider = Arc::new(provider);
+
+    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
+
+    let mut cache_db = init_cache_db(provider.clone());
+
+    init_account(ME, &mut cache_db, provider.clone()).await?;
+    init_account(V3_POOL_3000_ADDR, &mut cache_db, provider.clone()).await?;
+    let mocked_erc20 = include_str!("bytecode/generic_erc20.hex");
+    let mocked_erc20 = Bytes::from_str(mocked_erc20).unwrap();
+    let mocked_erc20 = Bytecode::new_raw(mocked_erc20);
+
+    init_account_with_bytecode(WETH_ADDR, mocked_erc20.clone(), &mut cache_db)?;
+    init_account_with_bytecode(USDC_ADDR, mocked_erc20.clone(), &mut cache_db)?;
+
+    let mocked_balance = U256::MAX.div(U256::from(2));
+    insert_mapping_storage_slot(
+        WETH_ADDR,
+        U256::ZERO,
+        V3_POOL_3000_ADDR,
+        mocked_balance,
+        &mut cache_db,
+    )?;
+    insert_mapping_storage_slot(
+        USDC_ADDR,
+        U256::ZERO,
+        V3_POOL_3000_ADDR,
+        mocked_balance,
+        &mut cache_db,
+    )?;
+
+    let mocked_custom_quoter = include_str!("bytecode/uni_v3_quoter.hex");
+    let mocked_custom_quoter = Bytes::from_str(mocked_custom_quoter).unwrap();
+    let mocked_custom_quoter = Bytecode::new_raw(mocked_custom_quoter);
+    init_account_with_bytecode(CUSTOM_QUOTER_ADDR, mocked_custom_quoter, &mut cache_db)?;
+
+    let start = measure_start("revm_quoter_first");
+    let first_volume = volumes[0];
+    let calldata = get_amount_out_calldata(V3_POOL_3000_ADDR, WETH_ADDR, USDC_ADDR, first_volume);
+    let response = revm_revert(ME, CUSTOM_QUOTER_ADDR, calldata, &mut cache_db)?;
+    let amount_out = decode_get_amount_out_response(response)?;
+    println!("{} WETH -> USDC {}", first_volume, amount_out);
+    measure_end(start);
+
+    let start = measure_start("revm_quoter");
+    for (index, volume) in volumes.into_iter().enumerate() {
+        let calldata = get_amount_out_calldata(V3_POOL_3000_ADDR, WETH_ADDR, USDC_ADDR, volume);
+        let response = revm_revert(ME, CUSTOM_QUOTER_ADDR, calldata, &mut cache_db)?;
+        let amount_out = decode_get_amount_out_response(response)?;
+
+        if index % 20 == 0 {
+            println!("{} WETH -> USDC {}", volume, amount_out);
+        }
+    }
+    measure_end(start);
+
+    Ok(())
+}
+
+
+
+==================== src/revm.rs ====================
+pub mod source;
+use alloy::{primitives::U256, providers::ProviderBuilder};
+use anyhow::Result;
+use std::ops::Div;
+use std::sync::Arc;
+
+use crate::source::{
+    decode_quote_response, init_cache_db, measure_end, measure_start, quote_calldata, revm_call,
+    volumes, ME, ONE_ETHER, USDC_ADDR, V3_QUOTER_ADDR, WETH_ADDR,
+};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    env_logger::init();
+
+    let provider = ProviderBuilder::new().on_http(std::env::var("ETH_RPC_URL").unwrap().parse()?);
+    let provider = Arc::new(provider);
+
+    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
+
+    let mut cache_db = init_cache_db(provider.clone());
+
+    let start = measure_start("revm_first");
+    let first_volume = volumes[0];
+    let calldata = quote_calldata(WETH_ADDR, USDC_ADDR, first_volume, 3000);
+    let response = revm_call(ME, V3_QUOTER_ADDR, calldata, &mut cache_db)?;
+    let amount_out = decode_quote_response(response)?;
+    println!("{} WETH -> USDC {}", first_volume, amount_out);
+    measure_end(start);
+
+    let start = measure_start("revm");
+    for (index, volume) in volumes.into_iter().enumerate() {
+        let calldata = quote_calldata(WETH_ADDR, USDC_ADDR, volume, 3000);
+        let response = revm_call(ME, V3_QUOTER_ADDR, calldata, &mut cache_db)?;
+
+        let amount_out = decode_quote_response(response)?;
+        if index % 20 == 0 {
+            println!("{} WETH -> USDC {}", volume, amount_out);
+        }
+    }
+
+    measure_end(start);
+
+    Ok(())
+}
+
+
+
+==================== src/revm_validate.rs ====================
+pub mod source;
+use alloy::{
+    primitives::{Bytes, U256},
+    providers::{Provider, ProviderBuilder},
+};
+use anyhow::Result;
+use revm::primitives::Bytecode;
+use std::sync::Arc;
+use std::{
+    ops::{Div, Mul},
+    str::FromStr,
+};
+
+use crate::source::{
+    build_tx, decode_get_amount_out_response, decode_quote_response, get_amount_out_calldata,
+    init_account, init_account_with_bytecode, init_cache_db, insert_mapping_storage_slot,
+    quote_calldata, revm_revert, volumes, CUSTOM_QUOTER_ADDR, ME, ONE_ETHER, USDC_ADDR,
+    V3_POOL_3000_ADDR, V3_QUOTER_ADDR, WETH_ADDR,
+};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    env_logger::init();
+
+    let provider = ProviderBuilder::new().on_http(std::env::var("ETH_RPC_URL").unwrap().parse()?);
+
+    let provider = Arc::new(provider);
+    let base_fee = provider.get_gas_price().await?;
+    let base_fee = base_fee.mul(110).div(100);
+
+    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 10);
+
+    let mut cache_db = init_cache_db(provider.clone());
+
+    init_account(ME, &mut cache_db, provider.clone()).await?;
+    init_account(V3_POOL_3000_ADDR, &mut cache_db, provider.clone()).await?;
+    let mocked_erc20 = include_str!("bytecode/generic_erc20.hex");
+    let mocked_erc20 = Bytes::from_str(mocked_erc20).unwrap();
+    let mocked_erc20 = Bytecode::new_raw(mocked_erc20);
+
+    init_account_with_bytecode(WETH_ADDR, mocked_erc20.clone(), &mut cache_db)?;
+    init_account_with_bytecode(USDC_ADDR, mocked_erc20.clone(), &mut cache_db)?;
+
+    let mocked_balance = U256::MAX.div(U256::from(2));
+    insert_mapping_storage_slot(
+        WETH_ADDR,
+        U256::ZERO,
+        V3_POOL_3000_ADDR,
+        mocked_balance,
+        &mut cache_db,
+    )?;
+    insert_mapping_storage_slot(
+        USDC_ADDR,
+        U256::ZERO,
+        V3_POOL_3000_ADDR,
+        mocked_balance,
+        &mut cache_db,
+    )?;
+
+    let mocked_custom_quoter = include_str!("bytecode/uni_v3_quoter.hex");
+    let mocked_custom_quoter = Bytes::from_str(mocked_custom_quoter).unwrap();
+    let mocked_custom_quoter = Bytecode::new_raw(mocked_custom_quoter);
+    init_account_with_bytecode(CUSTOM_QUOTER_ADDR, mocked_custom_quoter, &mut cache_db)?;
+
+    for volume in volumes {
+        let call_calldata = quote_calldata(WETH_ADDR, USDC_ADDR, volume, 3000);
+        let tx = build_tx(V3_QUOTER_ADDR, ME, call_calldata, base_fee);
+        let call_response = provider.call(&tx).await?;
+        let call_amount_out = decode_quote_response(call_response)?;
+
+        let revm_calldata =
+            get_amount_out_calldata(V3_POOL_3000_ADDR, WETH_ADDR, USDC_ADDR, volume);
+        let revm_response = revm_revert(ME, CUSTOM_QUOTER_ADDR, revm_calldata, &mut cache_db)?;
+        let revm_amount_out = decode_get_amount_out_response(revm_response)?;
+
+        println!(
+            "{} WETH -> USDC REVM {} ETH_CALL {}",
+            volume, revm_amount_out, call_amount_out
+        );
+
+        assert_eq!(revm_amount_out, call_amount_out);
+    }
+
+    Ok(())
+}
+
+
+
+==================== src/source/abi.rs ====================
+use alloy::{
+    primitives::{aliases::U24, Address, Bytes, U160, U256},
+    sol,
+    sol_types::{SolCall, SolValue},
+};
+
+use anyhow::Result;
+
+sol! {
+    struct QuoteExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint256 amountIn;
+        uint24 fee;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function quoteExactInputSingle(QuoteExactInputSingleParams memory params)
+    public
+    override
+    returns (
+        uint256 amountOut,
+        uint160 sqrtPriceX96After,
+        uint32 initializedTicksCrossed,
+        uint256 gasEstimate
+    );
+
+}
+
+sol! {
+    function getAmountOut(
+        address pool,
+        bool zeroForOne,
+        uint256 amountIn
+    ) external;
+}
+
+pub fn decode_quote_response(response: Bytes) -> Result<u128> {
+    let (amount_out, _, _, _) = <(u128, u128, u32, u128)>::abi_decode(&response, false)?;
+    Ok(amount_out)
+}
+
+pub fn decode_get_amount_out_response(response: Bytes) -> Result<u128> {
+    let value = response.to_vec();
+    let last_64_bytes = &value[value.len() - 64..];
+
+    let (a, b) = match <(i128, i128)>::abi_decode(last_64_bytes, false) {
+        Ok((a, b)) => (a, b),
+        Err(e) => return Err(anyhow::anyhow!("'getAmountOut' decode failed: {:?}", e)),
+    };
+    let value_out = std::cmp::min(a, b);
+    let value_out = -value_out;
+    Ok(value_out as u128)
+}
+
+pub fn get_amount_out_calldata(
+    pool: Address,
+    token_in: Address,
+    token_out: Address,
+    amount_in: U256,
+) -> Bytes {
+    Bytes::from(
+        getAmountOutCall {
+            pool,
+            zeroForOne: token_in < token_out,
+            amountIn: amount_in,
+        }
+        .abi_encode(),
+    )
+}
+
+pub fn quote_calldata(token_in: Address, token_out: Address, amount_in: U256, fee: u32) -> Bytes {
+    let zero_for_one = token_in < token_out;
+
+    let sqrt_price_limit_x96: U160 = if zero_for_one {
+        "4295128749".parse().unwrap()
+    } else {
+        "1461446703485210103287273052203988822378723970341"
+            .parse()
+            .unwrap()
+    };
+
+    let params = QuoteExactInputSingleParams {
+        tokenIn: token_in,
+        tokenOut: token_out,
+        amountIn: amount_in,
+        fee: U24::from(fee),
+        sqrtPriceLimitX96: sqrt_price_limit_x96,
+    };
+
+    Bytes::from(quoteExactInputSingleCall { params }.abi_encode())
+}
+
+
+
+
+sol! {
+    function quoteExactInput(
+        bytes path,
+        uint256 amountIn
+    )
+    public
+    returns (
+        uint256 amountOut,
+        uint160[] memory sqrtPriceX96AfterList,
+        uint32[] memory initializedTicksCrossedList,
+        uint256 gasEstimate
+    );
+}
+
+pub fn encode_path(tokens: &[Address], fees: &[U24]) -> Bytes {
+    assert!(tokens.len() == fees.len() + 1, "Path length mismatch between tokens and fees");
+
+    let mut path = Vec::new();
+    for i in 0..fees.len() {
+        path.extend_from_slice(tokens[i].as_ref());
+        let fee_bytes: [u8; 3] = fees[i].to_be_bytes::<3>(); // Explicitly specifying size
+        path.extend_from_slice(&fee_bytes);
+    }
+    path.extend_from_slice(tokens.last().unwrap().as_ref());
+    Bytes::from(path)
+}
+
+
+use std::fmt;
+
+pub struct PrettyBytes(pub Bytes);
+
+impl fmt::Display for PrettyBytes {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for byte in self.0.iter() {
+            write!(f, "{:02x} ", byte)?;
+        }
+        Ok(())
+    }
+}
+
+pub fn quote_exact_input_calldata(tokens: &[Address], fees: &[U24], amount_in: U256) -> Bytes {
+    let path = encode_path(tokens, fees);
+    Bytes::from(quoteExactInputCall {
+        path,
+        amountIn: amount_in, }.abi_encode())
+}
+
+pub fn quote_exact_input_single_calldata(
+    token_in: Address,
+    token_out: Address,
+    amount_in: U256,
+    fee: u32,
+) -> Bytes {
+    let path = encode_path(&[token_in, token_out], &[U24::from(fee)]);
+    let pretty = PrettyBytes(path.clone());
+    println!("{}", pretty);
+    let encoded = quoteExactInputCall {
+        path,
+        amountIn: amount_in }.abi_encode();
+    println!("encoded: {:?}", encoded.clone());
+    Bytes::from(encoded)
+}
+
+
+
+==================== src/source/actors.rs ====================
+use alloy::primitives::{address, Address};
+
+pub static WETH_ADDR: Address = address!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
+pub static USDC_ADDR: Address = address!("a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
+pub static V3_QUOTER_ADDR: Address = address!("61fFE014bA17989E743c5F6cB21bF9697530B21e");
+pub static V3_POOL_500_ADDR: Address = address!("88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640");
+pub static V3_POOL_3000_ADDR: Address = address!("8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8");
+pub static ME: Address = address!("0000000000000000000000000000000000000001");
+pub static CUSTOM_QUOTER_ADDR: Address = address!("A5C381211A406b48A073E954e6949B0D49506bc0");
+
+
+
+==================== src/source/helpers.rs ====================
+use alloy::{
+    network::{Ethereum, TransactionBuilder},
+    primitives::{Address, Bytes, U256},
+    providers::{Provider, RootProvider},
+    rpc::types::TransactionRequest,
+    sol_types::SolValue,
+    transports::http::{Client, Http},
+    uint,
+};
+
+pub static ONE_ETHER: U256 = uint!(1_000_000_000_000_000_000_U256);
+
+use anyhow::{anyhow, Result};
+use revm::primitives::{keccak256, AccountInfo, Bytecode};
+use revm::{
+    db::{AlloyDB, CacheDB},
+    primitives::{ExecutionResult, Output, TransactTo},
+    Evm,
+};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::time::Instant;
+
+
+// use web3::types::H160;
+// use web3::helpers::to_checksum;
+
+// /// Converts a lowercase Ethereum address to a checksummed address (EIP-55).
+// pub fn to_checksum_address(address: &str) -> Result<String, String> {
+//     // Parse the input string into an H160 Ethereum address
+//     match address.parse::<H160>() {
+//         Ok(h160_address) => Ok(to_checksum(&h160_address, None)),
+//         Err(_) => Err("Invalid Ethereum address format".to_string()),
+//     }
+// }
+
+pub fn measure_start(label: &str) -> (String, Instant) {
+    (label.to_string(), Instant::now())
+}
+
+pub fn measure_end(start: (String, Instant)) -> Duration {
+    let elapsed = start.1.elapsed();
+    println!("Elapsed: {:.2?} for '{}'", elapsed, start.0);
+    elapsed
+}
+
+pub fn volumes(from: U256, to: U256, count: usize) -> Vec<U256> {
+    let start = U256::ZERO;
+    let mut volumes = Vec::new();
+    let distance = to - from;
+    let step = distance / U256::from(count);
+
+    for i in 1..(count + 1) {
+        let current = start + step * U256::from(i);
+        volumes.push(current);
+    }
+
+    volumes.reverse();
+    volumes
+}
+
+pub fn build_tx(to: Address, from: Address, calldata: Bytes, base_fee: u128) -> TransactionRequest {
+    TransactionRequest::default()
+        .to(to)
+        .from(from)
+        .with_input(calldata)
+        .nonce(0)
+        .gas_limit(1000000)
+        .max_fee_per_gas(base_fee)
+        .max_priority_fee_per_gas(0)
+        .build_unsigned()
+        .unwrap()
+        .into()
+}
+
+pub fn build_tx_avalanche(
+    to: Address, 
+    from: Address, 
+    calldata: Bytes, 
+    base_fee: u128, 
+    chain_id: Option<u64> // Use Option for default handling
+) -> TransactionRequest {
+    // Use chain_id or fallback to Avalanche's default chain ID
+    let chain_id = chain_id.unwrap_or(43114); // Avalanche C-Chain ID
+    
+    TransactionRequest::default()
+        .to(to)
+        .from(from)
+        .with_input(calldata)
+        .nonce(0)
+        .gas_limit(1000000)
+        .max_fee_per_gas(10*base_fee)
+        .max_priority_fee_per_gas(0)
+        .with_chain_id(chain_id) // Use Avalanche's chain ID (43114)
+        .build_unsigned()
+        .unwrap()
+        .into()
+}
+
+pub fn build_tx_ronin(
+    to: Address, 
+    from: Address, 
+    calldata: Bytes, 
+    base_fee: u128, 
+    chain_id: Option<u64> // Use Option for default handling
+) -> TransactionRequest {
+    // Use chain_id or fallback to Avalanche's default chain ID
+    // let chain_id = chain_id.unwrap_or(2020); // Ronin
+    
+    TransactionRequest::default()
+        .to(to)
+        .from(from)
+        .with_input(calldata)
+        .nonce(0)
+        .gas_limit(1_000_000)
+        .max_fee_per_gas(1*base_fee)
+        .max_priority_fee_per_gas(0)
+        // .with_chain_id(chain_id) // Ronin
+        .build_unsigned()
+        .unwrap()
+        .into()
+}
+
+pub type AlloyCacheDB = CacheDB<AlloyDB<Http<Client>, Ethereum, Arc<RootProvider<Http<Client>>>>>;
+
+pub fn revm_call(
+    from: Address,
+    to: Address,
+    calldata: Bytes,
+    cache_db: &mut AlloyCacheDB,
+) -> Result<Bytes> {
+    let mut evm = Evm::builder()
+        .with_db(cache_db)
+        .modify_tx_env(|tx| {
+            tx.caller = from;
+            tx.transact_to = TransactTo::Call(to);
+            tx.data = calldata;
+            tx.value = U256::ZERO;
+        })
+        .build();
+
+    let ref_tx = evm.transact().unwrap();
+    let result = ref_tx.result;
+
+    let value = match result {
+        ExecutionResult::Success {
+            output: Output::Call(value),
+            ..
+        } => value,
+        result => {
+            return Err(anyhow!("execution failed: {result:?}"));
+        }
+    };
+
+    Ok(value)
+}
+
+pub fn revm_revert(
+    from: Address,
+    to: Address,
+    calldata: Bytes,
+    cache_db: &mut AlloyCacheDB,
+) -> Result<Bytes> {
+    let mut evm = Evm::builder()
+        .with_db(cache_db)
+        .modify_tx_env(|tx| {
+            tx.caller = from;
+            tx.transact_to = TransactTo::Call(to);
+            tx.data = calldata;
+            tx.value = U256::ZERO;
+        })
+        .build();
+    let ref_tx = evm.transact().unwrap();
+    let result = ref_tx.result;
+
+    let value = match result {
+        ExecutionResult::Revert { output: value, .. } => value,
+        _ => {
+            panic!("It should never happen!");
+        }
+    };
+
+    Ok(value)
+}
+
+pub fn init_cache_db(provider: Arc<RootProvider<Http<Client>>>) -> AlloyCacheDB {
+    CacheDB::new(AlloyDB::new(provider, Default::default()).unwrap())
+}
+
+pub async fn init_account(
+    address: Address,
+    cache_db: &mut AlloyCacheDB,
+    provider: Arc<RootProvider<Http<Client>>>,
+) -> Result<()> {
+    let cache_key = format!("bytecode-{:?}", address);
+    let bytecode = match cacache::read(&cache_dir(), cache_key.clone()).await {
+        Ok(bytecode) => {
+            let bytecode = Bytes::from(bytecode);
+            Bytecode::new_raw(bytecode)
+        }
+        Err(_e) => {
+            let bytecode = provider.get_code_at(address).await?;
+            let bytecode_result = Bytecode::new_raw(bytecode.clone());
+            let bytecode = bytecode.to_vec();
+            cacache::write(&cache_dir(), cache_key, bytecode.clone()).await?;
+            bytecode_result
+        }
+    };
+    let code_hash = bytecode.hash_slow();
+    let acc_info = AccountInfo {
+        balance: U256::ZERO,
+        nonce: 0_u64,
+        code: Some(bytecode),
+        code_hash,
+    };
+    cache_db.insert_account_info(address, acc_info);
+    Ok(())
+}
+
+pub fn init_account_with_bytecode(
+    address: Address,
+    bytecode: Bytecode,
+    cache_db: &mut AlloyCacheDB,
+) -> Result<()> {
+    let code_hash = bytecode.hash_slow();
+    let acc_info = AccountInfo {
+        balance: U256::ZERO,
+        nonce: 0_u64,
+        code: Some(bytecode),
+        code_hash,
+    };
+
+    cache_db.insert_account_info(address, acc_info);
+    Ok(())
+}
+
+pub fn insert_mapping_storage_slot(
+    contract: Address,
+    slot: U256,
+    slot_address: Address,
+    value: U256,
+    cache_db: &mut AlloyCacheDB,
+) -> Result<()> {
+    let hashed_balance_slot = keccak256((slot_address, slot).abi_encode());
+
+    cache_db.insert_account_storage(contract, hashed_balance_slot.into(), value)?;
+    Ok(())
+}
+
+fn cache_dir() -> String {
+    ".evm_cache".to_string()
+}
+
+
+
+==================== src/source/mod.rs ====================
+mod abi;
+mod actors;
+mod helpers;
+
+pub use abi::*;
+pub use actors::*;
+pub use helpers::*;
+
+
+
+==================== src/to_checksum_address.rs ====================
+
+use anyhow::Result;
+use alloy::primitives::{address, Address};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let token_in: Address = address!("c99a6A985eD2Cac1ef41640596C5A5f9F4E19Ef5"); // WETH
+    let token_out: Address = address!("e514d9DEB7966c8BE0ca922de8a064264eA6bcd4"); // WRON
+    let quoter_address: Address = address!("84ab2f9fdc4bf66312b0819d879437b8749efdf2"); // Quoter
+
+    println!("token_in: {}", token_in);
+    println!("token_out: {}", token_out);
+    println!("quoter_address: {}", quoter_address);
+
+
+    Ok(())
+}
+
+
+
+==================== src/contracts/uni_v3_quoter.sol ====================
+//SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+interface IUniV3Pool {
+    function swap(
+        address recipient,
+        bool zeroForOne,
+        int256 amountSpecified,
+        uint160 sqrtPriceLimitX96,
+        bytes calldata data
+    ) external returns (int256 amount0, int256 amount1);
+}
+
+contract UniV3Quoter {
+    function uniswapV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata _data
+    ) external {
+        revert(string(abi.encode(amount0Delta, amount1Delta)));
+    }
+
+    function getAmountOut(
+        address pool,
+        bool zeroForOne,
+        uint256 amountIn
+    ) external {
+        uint160 sqrtPriceLimitX96 = (
+            zeroForOne
+                ? 4295128749
+                : 1461446703485210103287273052203988822378723970341
+        );
+
+        IUniV3Pool(pool).swap(
+            address(1),
+            zeroForOne,
+            int256(amountIn),
+            sqrtPriceLimitX96,
+            ""
+        );
+    }
+}
+
+
+
