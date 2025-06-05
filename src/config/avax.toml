@@ -1,0 +1,8 @@
+chain_id = 43114
+rpc_url = "https://api.avax.network/ext/bc/C/rpc"
+gas_multiplier = 10.0
+
+[tokens]
+WAVAX = "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7"
+USDC  = "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E"
+QUOTER = "0xbe0F5544EC67e9B3b2D979aaA43f18Fd87E6257F"

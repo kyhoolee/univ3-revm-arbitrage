@@ -1,0 +1,8 @@
+chain_id = 2021
+rpc_url = "https://ronin.gateway.tenderly.co/7dNLdBPOaPCaNqVx5pZ10s"
+gas_multiplier = 1.0
+
+[tokens]
+WETH = "0xc99a6A985eD2Cac1ef41640596C5A5f9F4E19Ef5"
+WRON = "0xe514d9DEB7966c8BE0ca922de8a064264eA6bcd4"
+QUOTER = "0x84ab2f9fdc4bf66312b0819d879437b8749efdf2"
