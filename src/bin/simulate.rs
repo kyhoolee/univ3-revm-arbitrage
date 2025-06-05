@@ -3,9 +3,11 @@ use univ3_revm_arbitrage::types::{load_chain_config, ChainConfig};
 use univ3_revm_arbitrage::core::{
     call::run_eth_call,
     revm::run_eth_revm,
-    anvil::run_eth_anvil,            // Uncomment khi refactor xong
-    // arbitrage::run_eth_arbitrage,
-    // validate::run_eth_validate,
+    anvil::run_eth_anvil,            
+    revm_cached::run_eth_revm_cached,
+    revm_quoter::run_eth_revm_quoter,
+    arbitrage::run_eth_arbitrage,
+    validate::run_eth_validate,
 };
 
 #[derive(Parser, Debug)]
@@ -33,8 +35,10 @@ async fn main() -> anyhow::Result<()> {
         "call" => run_eth_call(&config).await?,
         "revm" => run_eth_revm(&config).await?,
         "anvil" => run_eth_anvil(&config).await?,
-        // "arbitrage" => run_eth_arbitrage(&config).await?,
-        // "validate" => run_eth_validate(&config).await?,
+        "revm_cached" => run_eth_revm_cached(&config).await?, 
+        "revm_quoter" => run_eth_revm_quoter(&config).await?,
+        "arbitrage" => run_eth_arbitrage(&config).await?,
+        "validate" => run_eth_validate(&config).await?,
         _ => eprintln!("Unknown method: {}", args.method),
     }
 

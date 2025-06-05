@@ -1,98 +1,78 @@
-// pub mod source;
-use alloy::{
-    primitives::{Bytes, U256},
-    providers::ProviderBuilder, rpc,
-};
-use anyhow::Result;
-use revm::primitives::Bytecode;
 use std::sync::Arc;
 use std::{ops::Div, str::FromStr};
 
-use univ3_revm_arbitrage::source::*;
-use univ3_revm_arbitrage::chain::eth::*;
+use alloy::signers::k256::elliptic_curve::consts::U2;
+use anyhow::Result;
+use alloy::{
+    primitives::{Bytes, U256},
+    providers::ProviderBuilder,
+};
+use revm::primitives::Bytecode;
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    env_logger::init();
+use crate::types::{ChainConfig, ONE_ETHER};
+use crate::source::{abi::*, builder::volumes};
+use crate::core::db::*;
 
-    let rpc_url = std::env::var("ETH_RPC_URL").unwrap_or_else(|_| "https://eth.merkle.io".to_string());
-    let provider = ProviderBuilder::new().on_http(rpc_url.parse()?);
+/// Mô phỏng back-and-forth arbitrage WETH -> USDC -> WETH
+/// Dùng custom UniV3Quoter để quote offchain qua REVM
+pub async fn run_eth_arbitrage(config: &ChainConfig) -> Result<()> {
+    let provider = ProviderBuilder::new()
+        .on_http(config.rpc_url.parse()?);
     let provider = Arc::new(provider);
-
-    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
+    // Tạo REVM cache database từ provider
 
     let mut cache_db = init_cache_db(provider.clone());
 
-    init_account(ME, &mut cache_db, provider.clone()).await?;
-    init_account(V3_POOL_3000_ADDR, &mut cache_db, provider.clone()).await?;
-    init_account(V3_POOL_500_ADDR, &mut cache_db, provider.clone()).await?;
-    let mocked_erc20 = include_str!("../bytecode/generic_erc20.hex");
-    let mocked_erc20 = Bytes::from_str(mocked_erc20).unwrap();
-    let mocked_erc20 = Bytecode::new_raw(mocked_erc20);
+    let from = config.addr("ME")?;
+    let token_in = config.addr("WETH")?;
+    let token_out = config.addr("USDC")?;
+    let pool1 = config.addr("POOL_500")?;
+    let pool2 = config.addr("POOL_3000")?;
+    let quoter = config.addr("CUSTOM_QUOTER")?;
 
-    init_account_with_bytecode(WETH_ADDR, mocked_erc20.clone(), &mut cache_db)?;
-    init_account_with_bytecode(USDC_ADDR, mocked_erc20.clone(), &mut cache_db)?;
+    let mocked_erc20 = include_str!("../bytecode/generic_erc20.hex");
+    let mocked_erc20 = Bytecode::new_raw(Bytes::from_str(mocked_erc20)?);
+
+    let mocked_quoter = include_str!("../bytecode/uni_v3_quoter.hex");
+    let mocked_quoter = Bytecode::new_raw(Bytes::from_str(mocked_quoter)?);
+
+    // Khởi tạo REVM state cho quoter, pool, token
+    init_account(from, &mut cache_db, provider.clone()).await?;
+    init_account(pool1, &mut cache_db, provider.clone()).await?;
+    init_account(pool2, &mut cache_db, provider.clone()).await?;
+
+    init_account_with_bytecode(token_in, mocked_erc20.clone(), &mut cache_db)?;
+    init_account_with_bytecode(token_out, mocked_erc20.clone(), &mut cache_db)?;
+    init_account_with_bytecode(quoter, mocked_quoter, &mut cache_db)?;
 
     let mocked_balance = U256::MAX.div(U256::from(2));
+    for &pool in &[pool1, pool2] {
+        insert_mapping_storage_slot(token_in, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
+        insert_mapping_storage_slot(token_out, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
+    }
 
-    insert_mapping_storage_slot(
-        WETH_ADDR,
-        U256::ZERO,
-        V3_POOL_3000_ADDR,
-        mocked_balance,
-        &mut cache_db,
-    )?;
-    insert_mapping_storage_slot(
-        USDC_ADDR,
-        U256::ZERO,
-        V3_POOL_3000_ADDR,
-        mocked_balance,
-        &mut cache_db,
-    )?;
-    insert_mapping_storage_slot(
-        WETH_ADDR,
-        U256::ZERO,
-        V3_POOL_500_ADDR,
-        mocked_balance,
-        &mut cache_db,
-    )?;
-    insert_mapping_storage_slot(
-        USDC_ADDR,
-        U256::ZERO,
-        V3_POOL_500_ADDR,
-        mocked_balance,
-        &mut cache_db,
-    )?;
+    // Loop từng volume để kiểm tra arbitrage
+    let vols = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
+    for vol in vols {
+        let calldata1 = get_amount_out_calldata(pool1, token_in, token_out, vol);
+        let resp1 = revm_revert(from, quoter, calldata1, &mut cache_db)?;
+        let token_out_amount = decode_get_amount_out_response(resp1)?;
 
-    let mocked_custom_quoter = include_str!("../bytecode/uni_v3_quoter.hex");
-    let mocked_custom_quoter = Bytes::from_str(mocked_custom_quoter).unwrap();
-    let mocked_custom_quoter = Bytecode::new_raw(mocked_custom_quoter);
-    init_account_with_bytecode(CUSTOM_QUOTER_ADDR, mocked_custom_quoter, &mut cache_db)?;
-
-    for volume in volumes.into_iter() {
-        let calldata = get_amount_out_calldata(V3_POOL_500_ADDR, WETH_ADDR, USDC_ADDR, volume);
-        let response = revm_revert(ME, CUSTOM_QUOTER_ADDR, calldata, &mut cache_db)?;
-        let usdc_amount_out = decode_get_amount_out_response(response)?;
-        let calldata = get_amount_out_calldata(
-            V3_POOL_3000_ADDR,
-            USDC_ADDR,
-            WETH_ADDR,
-            U256::from(usdc_amount_out),
-        );
-        let response = revm_revert(ME, CUSTOM_QUOTER_ADDR, calldata, &mut cache_db)?;
-        let weth_amount_out = decode_get_amount_out_response(response)?;
+        let calldata2 = get_amount_out_calldata(pool2, token_out, token_in, U256::from(token_out_amount));
+        let resp2 = revm_revert(from, quoter, calldata2, &mut cache_db)?;
+        let token_in_back = decode_get_amount_out_response(resp2)?;
+        let token_in_back = U256::from(token_in_back);
 
         println!(
-            "{} WETH -> USDC {} -> WETH {}",
-            volume, usdc_amount_out, weth_amount_out
+            "{} WETH → USDC {} → WETH {}",
+            vol, token_out_amount, token_in_back
         );
 
-        let weth_amount_out = U256::from(weth_amount_out);
-        if weth_amount_out > volume {
-            let profit = weth_amount_out - volume;
-            println!("WETH profit: {}", profit);
+        if token_in_back > vol {
+            let profit = token_in_back - vol;
+            println!("✅ Arbitrage profit: {} WETH", profit);
         } else {
-            println!("No profit.");
+            println!("❌ No profit");
         }
     }
 
