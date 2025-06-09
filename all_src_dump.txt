@@ -1,5 +1,5 @@
 
-==================== src/core/anvil.rs ====================
+==================== src/core/chain_anvil.rs ====================
 use std::sync::Arc;
 use std::ops::Div;
 use anyhow::Result;
@@ -15,9 +15,10 @@ use crate::types::{ChainConfig, ONE_ETHER};
 use crate::source::{builder::volumes, abi::*, builder::build_tx};
 use crate::core::logger::{measure_start, measure_end};
 
-/// Chạy mô phỏng quote thông qua Anvil forked mainnet
-/// → Có thể so sánh với eth_call hoặc revm để kiểm tra kết quả giống thực tế
-pub async fn run_eth_anvil(config: &ChainConfig) -> Result<()> {
+use crate::chain::actors::ChainActors; // cần thêm import
+
+/// Chạy mô phỏng quote thông qua Anvil forked mainnet (multi-chain)
+pub async fn run_chain_anvil(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
     // 1️⃣ Parse RPC URL và khởi tạo provider thật
     let rpc_url = config.rpc_url.parse::<Url>()?;
     let provider = ProviderBuilder::new().on_http(rpc_url.clone());
@@ -39,33 +40,39 @@ pub async fn run_eth_anvil(config: &ChainConfig) -> Result<()> {
         .on_http(anvil.endpoint().parse::<Url>()?);
     let anvil_provider = Arc::new(anvil_provider);
 
-    // 5️⃣ Lấy thông tin token / quoter / from từ config
+    // 5️⃣ Lấy thông tin token / quoter / from từ config + actors
     let from = config.addr("ME")?;
-    let token_in = config.addr("WETH")?;
-    let token_out = config.addr("USDC")?;
-    let quoter = config.addr("QUOTER")?;
+    let token_in = config.addr(actors.native_token_key)?;
+    let token_out = config.addr(actors.stable_token_key)?;
+    let quoter = config.addr(actors.quoter_key)?;
 
     // 6️⃣ Chuẩn bị volumes để benchmark
     let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
 
     // 7️⃣ Quote lần đầu
     let start = measure_start("anvil_first");
-    let calldata = quote_calldata(token_in, token_out, volumes[0], 3000);
+    let calldata = quote_calldata(token_in, token_out, volumes[0], actors.default_fee);
     let tx = build_tx(quoter, from, calldata, base_fee);
     let response = anvil_provider.call(&tx).await?;
     let amount_out = decode_quote_response(response)?;
-    println!("{} WETH -> USDC {}", volumes[0], amount_out);
+    println!(
+        "{} {} -> {} {}",
+        volumes[0], actors.native_token_key, actors.stable_token_key, amount_out
+    );
     measure_end(start);
 
     // 8️⃣ Loop để benchmark nhiều volume
     let start = measure_start("anvil_loop");
     for (index, volume) in volumes.into_iter().enumerate() {
-        let calldata = quote_calldata(token_in, token_out, volume, 3000);
+        let calldata = quote_calldata(token_in, token_out, volume, actors.default_fee);
         let tx = build_tx(quoter, from, calldata, base_fee);
         let response = anvil_provider.call(&tx).await?;
         let amount_out = decode_quote_response(response)?;
         if index % 20 == 0 {
-            println!("{} WETH -> USDC {}", volume, amount_out);
+            println!(
+                "{} {} -> {} {}",
+                volume, actors.native_token_key, actors.stable_token_key, amount_out
+            );
         }
     }
     measure_end(start);
@@ -77,11 +84,10 @@ pub async fn run_eth_anvil(config: &ChainConfig) -> Result<()> {
 
 
 
-==================== src/core/arbitrage.rs ====================
+==================== src/core/chain_arbitrage.rs ====================
 use std::sync::Arc;
-use std::{ops::Div, str::FromStr};
-
-use alloy::signers::k256::elliptic_curve::consts::U2;
+use std::ops::Div;
+use std::str::FromStr;
 use anyhow::Result;
 use alloy::{
     primitives::{Bytes, U256},
@@ -92,31 +98,33 @@ use revm::primitives::Bytecode;
 use crate::types::{ChainConfig, ONE_ETHER};
 use crate::source::{abi::*, builder::volumes};
 use crate::core::db::*;
+use crate::core::logger::{measure_start, measure_end};
+use crate::chain::actors::ChainActors;
 
-/// Mô phỏng back-and-forth arbitrage WETH -> USDC -> WETH
+/// Mô phỏng back-and-forth arbitrage Native -> Stable -> Native
 /// Dùng custom UniV3Quoter để quote offchain qua REVM
-pub async fn run_eth_arbitrage(config: &ChainConfig) -> Result<()> {
+pub async fn run_chain_arbitrage(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
     let provider = ProviderBuilder::new()
         .on_http(config.rpc_url.parse()?);
     let provider = Arc::new(provider);
-    // Tạo REVM cache database từ provider
 
     let mut cache_db = init_cache_db(provider.clone());
 
     let from = config.addr("ME")?;
-    let token_in = config.addr("WETH")?;
-    let token_out = config.addr("USDC")?;
-    let pool1 = config.addr("POOL_500")?;
-    let pool2 = config.addr("POOL_3000")?;
-    let quoter = config.addr("CUSTOM_QUOTER")?;
+    let token_in = config.addr(actors.native_token_key)?;
+    let token_out = config.addr(actors.stable_token_key)?;
+    let pool1 = config.addr(actors.pool_500_key.expect("pool_500_key required"))?;
+    let pool2 = config.addr(actors.pool_3000_key.expect("pool_3000_key required"))?;
+    let quoter = config.addr(actors.custom_quoter_key.expect("custom_quoter_key required"))?;
 
+    // Load bytecode
     let mocked_erc20 = include_str!("../bytecode/generic_erc20.hex");
     let mocked_erc20 = Bytecode::new_raw(Bytes::from_str(mocked_erc20)?);
 
     let mocked_quoter = include_str!("../bytecode/uni_v3_quoter.hex");
     let mocked_quoter = Bytecode::new_raw(Bytes::from_str(mocked_quoter)?);
 
-    // Khởi tạo REVM state cho quoter, pool, token
+    // Init accounts
     init_account(from, &mut cache_db, provider.clone()).await?;
     init_account(pool1, &mut cache_db, provider.clone()).await?;
     init_account(pool2, &mut cache_db, provider.clone()).await?;
@@ -125,14 +133,17 @@ pub async fn run_eth_arbitrage(config: &ChainConfig) -> Result<()> {
     init_account_with_bytecode(token_out, mocked_erc20.clone(), &mut cache_db)?;
     init_account_with_bytecode(quoter, mocked_quoter, &mut cache_db)?;
 
-    let mocked_balance = U256::MAX.div(U256::from(2));
+    // Insert fake balances
+    let mocked_balance = U256::MAX / U256::from(2);
     for &pool in &[pool1, pool2] {
         insert_mapping_storage_slot(token_in, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
         insert_mapping_storage_slot(token_out, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
     }
 
-    // Loop từng volume để kiểm tra arbitrage
+    // Arbitrage loop
     let vols = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
+    measure_start("chain_arbitrage"); // Optional: đo log
+
     for vol in vols {
         let calldata1 = get_amount_out_calldata(pool1, token_in, token_out, vol);
         let resp1 = revm_revert(from, quoter, calldata1, &mut cache_db)?;
@@ -144,68 +155,23 @@ pub async fn run_eth_arbitrage(config: &ChainConfig) -> Result<()> {
         let token_in_back = U256::from(token_in_back);
 
         println!(
-            "{} WETH → USDC {} → WETH {}",
-            vol, token_out_amount, token_in_back
+            "{} {} → {} {} → {} {}",
+            vol, actors.native_token_key,
+            token_out_amount, actors.stable_token_key,
+            token_in_back, actors.native_token_key
         );
 
         if token_in_back > vol {
             let profit = token_in_back - vol;
-            println!("✅ Arbitrage profit: {} WETH", profit);
+            println!("✅ Arbitrage profit: {} {}", profit, actors.native_token_key);
         } else {
             println!("❌ No profit");
         }
     }
 
+    measure_end(measure_start("chain_arbitrage")); // Optional đo log
     Ok(())
 }
-
-
-
-==================== src/core/call.rs ====================
-use std::sync::Arc;
-use std::ops::Div;
-use anyhow::Result;
-use alloy::{
-    primitives::U256,
-    providers::{Provider, ProviderBuilder},
-};
-use crate::types::ChainConfig;
-use crate::source::{builder::*, abi::*};
-use crate::core::logger::{measure_start, measure_end};
-
-pub async fn run_eth_call(config: &ChainConfig) -> Result<()> {
-    // Setup provider
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
-
-    // Lấy base fee
-    let base_fee = provider.get_gas_price().await?;
-    let from = config.addr("ME")?;
-    let token_in = config.addr("WETH")?;
-    let token_out = config.addr("USDC")?;
-    let quoter = config.addr("QUOTER")?;
-
-    // Chuẩn bị volumes
-    let volumes = volumes(U256::ZERO, crate::types::ONE_ETHER.div(U256::from(10)), 100);
-
-    let start = measure_start("eth_call");
-
-    for (index, volume) in volumes.into_iter().enumerate() {
-        let calldata = quote_calldata(token_in, token_out, volume, 3000);
-        let tx = build_tx(quoter, from, calldata, base_fee);
-        let response = provider.call(&tx).await?;
-        let amount_out = decode_quote_response(response)?;
-
-        if index % 20 == 0 {
-            println!("{} WETH -> USDC {}", volume, amount_out);
-        }
-    }
-
-    measure_end(start);
-    Ok(())
-}
-
 
 
 
@@ -270,6 +236,328 @@ pub async fn run_chain_call(config: &ChainConfig, actors: &ChainActors) -> Resul
     }
 
     measure_end(start);
+    Ok(())
+}
+
+
+
+==================== src/core/chain_revm_cached.rs ====================
+use std::sync::Arc;
+use std::ops::Div;
+use std::str::FromStr;
+use anyhow::Result;
+use alloy::{
+    primitives::{Bytes, U256},
+    providers::{ProviderBuilder},
+};
+use revm::primitives::Bytecode;
+
+use crate::types::{ChainConfig, ONE_ETHER};
+use crate::source::{builder::volumes, abi::*};
+use crate::core::db::*;
+use crate::core::logger::{measure_start, measure_end};
+use crate::chain::actors::ChainActors;
+
+/// REVM mô phỏng UniswapV3 với dữ liệu cache:
+/// - Gán bytecode ERC20 giả cho token
+/// - Thêm balance thủ công vào REVM storage
+pub async fn run_chain_revm_cached(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
+    // 1️⃣ Tạo JSON-RPC provider
+    let provider = ProviderBuilder::new()
+        .on_http(config.rpc_url.parse()?);
+    let provider = Arc::new(provider);
+
+    // 2️⃣ Tạo cache db từ REVM memory
+    let mut cache_db = init_cache_db(provider.clone());
+
+    // 3️⃣ Địa chỉ cần dùng
+    let from = config.addr("ME")?;
+    let token_in = config.addr(actors.native_token_key)?;
+    let token_out = config.addr(actors.stable_token_key)?;
+    let quoter = config.addr(actors.quoter_key)?;
+    let pool = config.addr(actors.pool_3000_key.expect("Missing pool_3000_key for this chain"))?;
+
+
+    println!("from={:?} token_in={:?} token_out={:?} quoter={:?} pool={:?}", from, token_in, token_out, quoter, pool);
+
+    // 4️⃣ Chuẩn bị volume để benchmark
+    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
+
+    // 5️⃣ Tải bytecode thật cho quoter + pool vào memory state
+    init_account(quoter, &mut cache_db, provider.clone()).await?;
+    init_account(pool, &mut cache_db, provider.clone()).await?;
+
+    // 6️⃣ Tải bytecode ERC20 giả
+    let mocked_erc20 = include_str!("../bytecode/generic_erc20.hex");
+    let mocked_erc20 = Bytes::from_str(mocked_erc20)?;
+    let mocked_erc20 = Bytecode::new_raw(mocked_erc20);
+
+    // 7️⃣ Gán bytecode giả cho token (WETH/WAVAX, USDC)
+    init_account_with_bytecode(token_in, mocked_erc20.clone(), &mut cache_db)?;
+    init_account_with_bytecode(token_out, mocked_erc20.clone(), &mut cache_db)?;
+
+    // 8️⃣ Gán balance giả trong storage
+    let mocked_balance = U256::MAX / U256::from(2);
+    insert_mapping_storage_slot(token_in, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
+    insert_mapping_storage_slot(token_out, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
+
+    // 9️⃣ Quote lần đầu
+    let start = measure_start("revm_cached_first");
+    let calldata = quote_calldata(token_in, token_out, volumes[0], actors.default_fee);
+    let response = revm_call(from, quoter, calldata, &mut cache_db)?;
+    let amount_out = decode_quote_response(response)?;
+    println!("{} {} -> {} {}", volumes[0], actors.native_token_key, actors.stable_token_key, amount_out);
+    measure_end(start);
+
+    // 🔟 Quote nhiều volume để test hiệu suất
+    let start = measure_start("revm_cached_loop");
+    for (index, volume) in volumes.into_iter().enumerate() {
+        let calldata = quote_calldata(token_in, token_out, volume, actors.default_fee);
+        let response = revm_call(from, quoter, calldata, &mut cache_db)?;
+        let amount_out = decode_quote_response(response)?;
+        if index % 20 == 0 {
+            println!("{} {} -> {} {}", volume, actors.native_token_key, actors.stable_token_key, amount_out);
+        }
+    }
+    measure_end(start);
+
+    Ok(())
+}
+
+
+
+==================== src/core/chain_revm_quoter.rs ====================
+use std::sync::Arc;
+use std::ops::Div;
+use std::str::FromStr;
+use anyhow::Result;
+use alloy::{
+    primitives::{Bytes, U256},
+    providers::ProviderBuilder,
+};
+use revm::primitives::Bytecode;
+
+use crate::types::{ChainConfig, ONE_ETHER};
+use crate::source::{builder::volumes, abi::*};
+use crate::core::db::*;
+use crate::core::logger::{measure_start, measure_end};
+use crate::chain::actors::ChainActors;
+
+/// REVM chạy quote bằng custom UniV3Quoter contract (trả kết quả qua revert), multi-chain version
+pub async fn run_chain_revm_quoter(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
+    // 1️⃣ Setup provider và cache db
+    let provider = ProviderBuilder::new()
+        .on_http(config.rpc_url.parse()?);
+    let provider = Arc::new(provider);
+
+    let mut cache_db = init_cache_db(provider.clone());
+
+    // 2️⃣ Đọc address từ config
+    let from = config.addr("ME")?;
+    let token_in = config.addr(actors.native_token_key)?;
+    let token_out = config.addr(actors.stable_token_key)?;
+    let pool = config.addr(actors.pool_3000_key.expect("Missing pool_3000_key"))?;
+    let quoter = config.addr(actors.custom_quoter_key.expect("Missing custom_quoter_key"))?;
+
+    // 3️⃣ Chuẩn bị volume để benchmark
+    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
+
+    // 4️⃣ Load bytecode thật và giả vào REVM
+    init_account(from, &mut cache_db, provider.clone()).await?;
+    init_account(pool, &mut cache_db, provider.clone()).await?;
+
+    let mocked_erc20 = include_str!("../bytecode/generic_erc20.hex");
+    let mocked_erc20 = Bytecode::new_raw(Bytes::from_str(mocked_erc20)?);
+    init_account_with_bytecode(token_in, mocked_erc20.clone(), &mut cache_db)?;
+    init_account_with_bytecode(token_out, mocked_erc20.clone(), &mut cache_db)?;
+
+    // 5️⃣ Insert fake balances vào REVM storage
+    let mocked_balance = U256::MAX / U256::from(2);
+    insert_mapping_storage_slot(token_in, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
+    insert_mapping_storage_slot(token_out, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
+
+    // 6️⃣ Load custom quoter bytecode
+    let mocked_custom_quoter = include_str!("../bytecode/uni_v3_quoter.hex");
+    let mocked_custom_quoter = Bytecode::new_raw(Bytes::from_str(mocked_custom_quoter)?);
+    init_account_with_bytecode(quoter, mocked_custom_quoter, &mut cache_db)?;
+
+    // 7️⃣ Quote đầu tiên
+    let start = measure_start("chain_revm_quoter_first");
+    let calldata = get_amount_out_calldata(pool, token_in, token_out, volumes[0]);
+    let response = revm_revert(from, quoter, calldata, &mut cache_db)?;
+    let amount_out = decode_get_amount_out_response(response)?;
+    println!("{} {} -> {} {}", volumes[0], actors.native_token_key, actors.stable_token_key, amount_out);
+    measure_end(start);
+
+    // 8️⃣ Loop benchmark các volume còn lại
+    let start = measure_start("chain_revm_quoter_loop");
+    for (index, volume) in volumes.into_iter().enumerate() {
+        let calldata = get_amount_out_calldata(pool, token_in, token_out, volume);
+        let response = revm_revert(from, quoter, calldata, &mut cache_db)?;
+        let amount_out = decode_get_amount_out_response(response)?;
+        if index % 20 == 0 {
+            println!("{} {} -> {} {}", volume, actors.native_token_key, actors.stable_token_key, amount_out);
+        }
+    }
+    measure_end(start);
+
+    Ok(())
+}
+
+
+
+==================== src/core/chain_revm.rs ====================
+use std::sync::Arc;
+use std::ops::Div;
+use anyhow::Result;
+use alloy::{
+    primitives::U256,
+    providers::{ProviderBuilder, RootProvider},
+    transports::http::{Http, Client},
+};
+
+use crate::types::{ChainConfig, ONE_ETHER};
+use crate::source::{builder::volumes, abi::*};
+use crate::core::db::{init_cache_db, init_account, revm_call};
+use crate::core::logger::{measure_start, measure_end};
+use crate::chain::actors::ChainActors; // cần thêm import
+
+/// Mô phỏng quote swap từ UniswapV3 bằng `REVM` (multi-chain)
+pub async fn run_chain_revm(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
+    // 1️⃣ Khởi tạo JSON-RPC provider để fetch bytecode từ chain thực
+    let provider = ProviderBuilder::new()
+        .on_http(config.rpc_url.parse()?);
+    let provider = Arc::new(provider);
+
+    // 2️⃣ Tạo REVM CacheDB từ provider chain thực
+    let mut cache_db = init_cache_db(provider.clone());
+
+    // 3️⃣ Địa chỉ dùng trong giao dịch (từ config + actors)
+    let from = config.addr("ME")?;
+    let token_in = config.addr(actors.native_token_key)?;
+    let token_out = config.addr(actors.stable_token_key)?;
+    let quoter = config.addr(actors.quoter_key)?;
+
+    // 4️⃣ Chuẩn bị volume swap để benchmark
+    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
+
+    // 5️⃣ Tải bytecode của contract quoter vào REVM memory state
+    init_account(quoter, &mut cache_db, provider.clone()).await?;
+
+    // 6️⃣ Mô phỏng lần đầu
+    let start = measure_start("revm_first");
+    let calldata = quote_calldata(token_in, token_out, volumes[0], actors.default_fee);
+    let response = revm_call(from, quoter, calldata, &mut cache_db)?;
+    let amount_out = decode_quote_response(response)?;
+    println!(
+        "{} {} -> {} {}",
+        volumes[0], actors.native_token_key, actors.stable_token_key, amount_out
+    );
+    measure_end(start);
+
+    // 7️⃣ Mô phỏng lặp nhiều volume để benchmark
+    let start = measure_start("revm_loop");
+    for (index, volume) in volumes.into_iter().enumerate() {
+        let calldata = quote_calldata(token_in, token_out, volume, actors.default_fee);
+        let response = revm_call(from, quoter, calldata, &mut cache_db)?;
+        let amount_out = decode_quote_response(response)?;
+
+        if index % 20 == 0 {
+            println!(
+                "{} {} -> {} {}",
+                volume, actors.native_token_key, actors.stable_token_key, amount_out
+            );
+        }
+    }
+    measure_end(start);
+
+    Ok(())
+}
+
+
+
+==================== src/core/chain_validate.rs ====================
+use std::sync::Arc;
+use std::ops::{Div, Mul};
+use std::str::FromStr;
+use alloy::eips::BlockId;
+use anyhow::Result;
+use alloy::{
+    primitives::{Bytes, U256},
+    providers::{Provider, ProviderBuilder},
+};
+use revm::primitives::Bytecode;
+
+use crate::types::{ChainConfig, ONE_ETHER};
+use crate::source::{builder::volumes, abi::*, builder::build_tx};
+use crate::core::db::*;
+use crate::core::logger::{measure_start, measure_end};
+use crate::chain::actors::ChainActors;
+
+/// So sánh kết quả quote từ `eth_call` và `revm`
+/// Dùng custom UniV3Quoter để đảm bảo REVM phản hồi `amountOut` đúng
+pub async fn run_chain_validate(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
+    // 1️⃣ Setup RPC và provider
+    let provider = ProviderBuilder::new()
+        .on_http(config.rpc_url.parse()?);
+    let provider = Arc::new(provider);
+
+    // Tạo REVM cache database từ provider
+    let mut cache_db = init_cache_db(provider.clone());
+
+    let base_fee = provider.get_gas_price().await?;
+    let base_fee = base_fee.mul(110).div(100); // +10%
+
+    // 2️⃣ Load address từ config
+    let from = config.addr("ME")?;
+    let token_in = config.addr(actors.native_token_key)?;
+    let token_out = config.addr(actors.stable_token_key)?;
+    let pool = config.addr(actors.pool_3000_key.expect("pool_3000_key required"))?;
+    let quoter = config.addr(actors.quoter_key)?;
+    let custom_quoter = config.addr(actors.custom_quoter_key.expect("custom_quoter_key required"))?;
+
+    // 3️⃣ Chuẩn bị volume và mock data
+    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 10);
+
+    init_account(from, &mut cache_db, provider.clone()).await?;
+    init_account(pool, &mut cache_db, provider.clone()).await?;
+
+    let mocked_erc20 = include_str!("../bytecode/generic_erc20.hex");
+    let mocked_erc20 = Bytecode::new_raw(Bytes::from_str(mocked_erc20)?);
+    init_account_with_bytecode(token_in, mocked_erc20.clone(), &mut cache_db)?;
+    init_account_with_bytecode(token_out, mocked_erc20.clone(), &mut cache_db)?;
+
+    let mocked_balance = U256::MAX / U256::from(2);
+    insert_mapping_storage_slot(token_in, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
+    insert_mapping_storage_slot(token_out, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
+
+    let mocked_custom_quoter = include_str!("../bytecode/uni_v3_quoter.hex");
+    let mocked_custom_quoter = Bytecode::new_raw(Bytes::from_str(mocked_custom_quoter)?);
+    init_account_with_bytecode(custom_quoter, mocked_custom_quoter, &mut cache_db)?;
+
+    // 4️⃣ So sánh từng volume
+    for volume in volumes {
+        // Call onchain
+        let call_calldata = quote_calldata(token_in, token_out, volume, actors.default_fee);
+        let tx = build_tx(quoter, from, call_calldata, base_fee);
+        let call_response = provider.call(&tx).block(BlockId::latest()).await?;
+        let call_amount_out = decode_quote_response(call_response)?;
+
+        // Call REVM
+        let revm_calldata = get_amount_out_calldata(pool, token_in, token_out, volume);
+        let revm_response = revm_revert(from, custom_quoter, revm_calldata, &mut cache_db)?;
+        let revm_amount_out = decode_get_amount_out_response(revm_response)?;
+
+        println!(
+            "{} {} -> {} | REVM: {} | ETH_CALL: {}",
+            volume, actors.native_token_key, actors.stable_token_key, revm_amount_out, call_amount_out
+        );
+
+        // 5️⃣ Xác minh chính xác
+        assert_eq!(revm_amount_out, call_amount_out);
+    }
+
+    measure_end(measure_start("chain_validate")); // Optional đo log nếu muốn
     Ok(())
 }
 
@@ -463,323 +751,24 @@ pub fn log_quote(log: QuoteLog) {
 
 
 ==================== src/core/mod.rs ====================
-pub mod call;
-pub mod revm;
-pub mod anvil;     // chứa init_cache_db, init_account, v.v.
-pub mod revm_cached; // chứa run_eth_revm_cached, v.v.
-pub mod revm_quoter; // chứa run_eth_revm_quoter, v.v.
-pub mod validate;
-pub mod arbitrage;
+// pub mod call;
+// pub mod revm;
+// pub mod anvil;     // chứa init_cache_db, init_account, v.v.
+// pub mod revm_cached; // chứa run_eth_revm_cached, v.v.
+// pub mod revm_quoter; // chứa run_eth_revm_quoter, v.v.
+// pub mod validate;
+// pub mod arbitrage;
 
 pub mod chain_call;
+pub mod chain_revm;
+pub mod chain_anvil;     // chứa init_cache_db, init_account, v.v.
+pub mod chain_revm_cached; // chứa run_eth_revm_cached, v.v.
+pub mod chain_revm_quoter; // chứa run_eth_revm_quoter, v.v.
+pub mod chain_validate;
+pub mod chain_arbitrage;
+
 pub mod db;        // chứa init_cache_db, init_account, v.v.
 pub mod logger;    // chứa measure_start, structured log, ...
-
-
-
-==================== src/core/revm_cached.rs ====================
-use std::sync::Arc;
-use std::ops::Div;
-use std::str::FromStr;
-use anyhow::Result;
-use alloy::{
-    primitives::{Bytes, U256},
-    providers::ProviderBuilder,
-};
-use revm::primitives::Bytecode;
-
-use crate::types::{ChainConfig, ONE_ETHER};
-use crate::source::{builder::volumes, abi::*};
-use crate::core::db::*;
-use crate::core::logger::{measure_start, measure_end};
-
-/// REVM mô phỏng UniswapV3 với dữ liệu cache:
-/// - Gán bytecode ERC20 giả cho token
-/// - Thêm balance thủ công vào REVM storage
-pub async fn run_eth_revm_cached(config: &ChainConfig) -> Result<()> {
-    // 1️⃣ Tạo JSON-RPC provider để lấy pool/quoter bytecode thật
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
-
-    // 2️⃣ Tạo cache db từ REVM memory
-    let mut cache_db = init_cache_db(provider.clone());
-
-    // 3️⃣ Địa chỉ cần dùng
-    let from = config.addr("ME")?;
-    let token_in = config.addr("WETH")?;
-    let token_out = config.addr("USDC")?;
-    let quoter = config.addr("QUOTER")?;
-    let pool = config.addr("POOL_3000")?;
-
-    // 4️⃣ Chuẩn bị volume để benchmark
-    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
-
-    // 5️⃣ Tải bytecode thật cho quoter + pool vào memory state
-    init_account(quoter, &mut cache_db, provider.clone()).await?;
-    init_account(pool, &mut cache_db, provider.clone()).await?;
-
-    // 6️⃣ Tải bytecode ERC20 giả
-    let mocked_erc20 = include_str!("../bytecode/generic_erc20.hex");
-    let mocked_erc20 = Bytes::from_str(mocked_erc20)?;
-    let mocked_erc20 = Bytecode::new_raw(mocked_erc20);
-
-    // 7️⃣ Gán bytecode giả cho token (WETH, USDC)
-    init_account_with_bytecode(token_in, mocked_erc20.clone(), &mut cache_db)?;
-    init_account_with_bytecode(token_out, mocked_erc20.clone(), &mut cache_db)?;
-
-    // 8️⃣ Gán balance giả trong storage
-    let mocked_balance = U256::MAX / U256::from(2);
-    insert_mapping_storage_slot(token_in, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
-    insert_mapping_storage_slot(token_out, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
-
-    // 9️⃣ Quote lần đầu
-    let start = measure_start("revm_cached_first");
-    let calldata = quote_calldata(token_in, token_out, volumes[0], 3000);
-    let response = revm_call(from, quoter, calldata, &mut cache_db)?;
-    let amount_out = decode_quote_response(response)?;
-    println!("{} WETH -> USDC {}", volumes[0], amount_out);
-    measure_end(start);
-
-    // 🔟 Quote nhiều volume để test hiệu suất
-    let start = measure_start("revm_cached_loop");
-    for (index, volume) in volumes.into_iter().enumerate() {
-        let calldata = quote_calldata(token_in, token_out, volume, 3000);
-        let response = revm_call(from, quoter, calldata, &mut cache_db)?;
-        let amount_out = decode_quote_response(response)?;
-        if index % 20 == 0 {
-            println!("{} WETH -> USDC {}", volume, amount_out);
-        }
-    }
-    measure_end(start);
-
-    Ok(())
-}
-
-
-
-==================== src/core/revm_quoter.rs ====================
-use std::sync::Arc;
-use std::ops::Div;
-use std::str::FromStr;
-use anyhow::Result;
-use alloy::{
-    primitives::{Bytes, U256},
-    providers::ProviderBuilder,
-};
-use revm::primitives::Bytecode;
-
-use crate::types::{ChainConfig, ONE_ETHER};
-use crate::source::{builder::volumes, abi::*};
-use crate::core::db::*;
-use crate::core::logger::{measure_start, measure_end};
-
-/// REVM chạy quote bằng custom UniV3Quoter contract (trả kết quả trong revert)
-pub async fn run_eth_revm_quoter(config: &ChainConfig) -> Result<()> {
-    // 1️⃣ Khởi tạo provider và cache_db
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
-    // Tạo REVM cache database từ provider
-    let mut cache_db = init_cache_db(provider.clone());
-
-    // 2️⃣ Đọc address từ config
-    let from = config.addr("ME")?;
-    let token_in = config.addr("WETH")?;
-    let token_out = config.addr("USDC")?;
-    let pool = config.addr("POOL_3000")?;
-    let quoter = config.addr("CUSTOM_QUOTER")?;
-
-    // 3️⃣ Chuẩn bị volume để benchmark
-    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
-
-    // 4️⃣ Load bytecode thật và giả vào REVM
-    init_account(from, &mut cache_db, provider.clone()).await?;
-    init_account(pool, &mut cache_db, provider.clone()).await?;
-
-    let mocked_erc20 = include_str!("../bytecode/generic_erc20.hex");
-    let mocked_erc20 = Bytecode::new_raw(Bytes::from_str(mocked_erc20)?);
-    init_account_with_bytecode(token_in, mocked_erc20.clone(), &mut cache_db)?;
-    init_account_with_bytecode(token_out, mocked_erc20.clone(), &mut cache_db)?;
-
-    // 5️⃣ Insert fake balances vào REVM storage
-    let mocked_balance = U256::MAX / U256::from(2);
-    insert_mapping_storage_slot(token_in, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
-    insert_mapping_storage_slot(token_out, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
-
-    // 6️⃣ Load custom quoter bytecode (trả kết quả qua revert)
-    let mocked_custom_quoter = include_str!("../bytecode/uni_v3_quoter.hex");
-    let mocked_custom_quoter = Bytecode::new_raw(Bytes::from_str(mocked_custom_quoter)?);
-    init_account_with_bytecode(quoter, mocked_custom_quoter, &mut cache_db)?;
-
-    // 7️⃣ Quote đầu tiên
-    let start = measure_start("revm_quoter_first");
-    let calldata = get_amount_out_calldata(pool, token_in, token_out, volumes[0]);
-    let response = revm_revert(from, quoter, calldata, &mut cache_db)?;
-    let amount_out = decode_get_amount_out_response(response)?;
-    println!("{} WETH -> USDC {}", volumes[0], amount_out);
-    measure_end(start);
-
-    // 8️⃣ Loop benchmark các volume còn lại
-    let start = measure_start("revm_quoter_loop");
-    for (index, volume) in volumes.into_iter().enumerate() {
-        let calldata = get_amount_out_calldata(pool, token_in, token_out, volume);
-        let response = revm_revert(from, quoter, calldata, &mut cache_db)?;
-        let amount_out = decode_get_amount_out_response(response)?;
-        if index % 20 == 0 {
-            println!("{} WETH -> USDC {}", volume, amount_out);
-        }
-    }
-    measure_end(start);
-
-    Ok(())
-}
-
-
-
-==================== src/core/revm.rs ====================
-use std::sync::Arc;
-use std::ops::Div;
-use anyhow::Result;
-use alloy::{
-    primitives::U256,
-    providers::{ProviderBuilder, RootProvider},
-    transports::http::{Http, Client},
-};
-
-use crate::types::{ChainConfig, ONE_ETHER};
-use crate::source::{builder::volumes, abi::*};
-use crate::core::db::{init_cache_db, init_account, revm_call};
-use crate::core::logger::{measure_start, measure_end};
-
-/// Mô phỏng quote swap từ UniswapV3 bằng `REVM` (EVM giả lập offchain)
-/// Dùng calldata quoteExactInputSingle() và simulate bằng REVM trên memory state
-pub async fn run_eth_revm(config: &ChainConfig) -> Result<()> {
-    // 1️⃣ Khởi tạo JSON-RPC provider để fetch bytecode từ chain thực
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
-
-    // 2️⃣ Tạo REVM CacheDB từ provider chain thực
-    let mut cache_db = init_cache_db(provider.clone());
-
-    // 3️⃣ Địa chỉ dùng trong giao dịch (từ config)
-    let from = config.addr("ME")?;
-    let token_in = config.addr("WETH")?;
-    let token_out = config.addr("USDC")?;
-    let quoter = config.addr("QUOTER")?;
-
-    // 4️⃣ Chuẩn bị volume swap để benchmark
-    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
-
-    // 5️⃣ Tải bytecode của contract quoter vào REVM memory state
-    init_account(quoter, &mut cache_db, provider.clone()).await?;
-
-    // 6️⃣ Mô phỏng lần đầu: WETH → USDC với volume đầu tiên
-    let start = measure_start("revm_first");
-    let calldata = quote_calldata(token_in, token_out, volumes[0], 3000);
-    let response = revm_call(from, quoter, calldata, &mut cache_db)?;
-    let amount_out = decode_quote_response(response)?;
-    println!("{} WETH -> USDC {}", volumes[0], amount_out);
-    measure_end(start);
-
-    // 7️⃣ Mô phỏng lặp nhiều volume để benchmark hiệu suất
-    let start = measure_start("revm_loop");
-    for (index, volume) in volumes.into_iter().enumerate() {
-        let calldata = quote_calldata(token_in, token_out, volume, 3000);
-        let response = revm_call(from, quoter, calldata, &mut cache_db)?;
-        let amount_out = decode_quote_response(response)?;
-
-        if index % 20 == 0 {
-            println!("{} WETH -> USDC {}", volume, amount_out);
-        }
-    }
-    measure_end(start);
-
-    Ok(())
-}
-
-
-
-==================== src/core/validate.rs ====================
-use std::sync::Arc;
-use std::ops::{Div, Mul};
-use std::str::FromStr;
-use anyhow::Result;
-use alloy::providers::Provider;
-use alloy::{
-    primitives::{Bytes, U256},
-    providers::ProviderBuilder,
-};
-use revm::primitives::Bytecode;
-
-use crate::types::{ChainConfig, ONE_ETHER};
-use crate::source::{builder::volumes, abi::*, builder::build_tx};
-use crate::core::db::*;
-
-/// So sánh kết quả quote từ `eth_call` và `revm`
-/// Dùng custom UniV3Quoter để đảm bảo REVM phản hồi `amountOut` đúng
-pub async fn run_eth_validate(config: &ChainConfig) -> Result<()> {
-    // 1️⃣ Setup RPC và provider
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
-    // Tạo REVM cache database từ provider
-
-    let mut cache_db = init_cache_db(provider.clone());
-
-    let base_fee = provider.get_gas_price().await?;
-    let base_fee = base_fee.mul(110).div(100); // +10% để đảm bảo an toàn fee
-
-    // 2️⃣ Load address từ config
-    let from = config.addr("ME")?;
-    let token_in = config.addr("WETH")?;
-    let token_out = config.addr("USDC")?;
-    let pool = config.addr("POOL_3000")?;
-    let quoter = config.addr("QUOTER")?;
-    let custom_quoter = config.addr("CUSTOM_QUOTER")?;
-
-    // 3️⃣ Chuẩn bị volume và mock data
-    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 10);
-
-    init_account(from, &mut cache_db, provider.clone()).await?;
-    init_account(pool, &mut cache_db, provider.clone()).await?;
-
-    let mocked_erc20 = include_str!("../bytecode/generic_erc20.hex");
-    let mocked_erc20 = Bytecode::new_raw(Bytes::from_str(mocked_erc20)?);
-    init_account_with_bytecode(token_in, mocked_erc20.clone(), &mut cache_db)?;
-    init_account_with_bytecode(token_out, mocked_erc20.clone(), &mut cache_db)?;
-
-    let mocked_balance = U256::MAX / U256::from(2);
-    insert_mapping_storage_slot(token_in, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
-    insert_mapping_storage_slot(token_out, U256::ZERO, pool, mocked_balance, &mut cache_db)?;
-
-    let mocked_custom_quoter = include_str!("../bytecode/uni_v3_quoter.hex");
-    let mocked_custom_quoter = Bytecode::new_raw(Bytes::from_str(mocked_custom_quoter)?);
-    init_account_with_bytecode(custom_quoter, mocked_custom_quoter, &mut cache_db)?;
-
-    // 4️⃣ So sánh từng volume
-    for volume in volumes {
-        let call_calldata = quote_calldata(token_in, token_out, volume, 3000);
-        let tx = build_tx(quoter, from, call_calldata, base_fee);
-        let call_response = provider.call(&tx).await?;
-        let call_amount_out = decode_quote_response(call_response)?;
-
-        let revm_calldata = get_amount_out_calldata(pool, token_in, token_out, volume);
-        let revm_response = revm_revert(from, custom_quoter, revm_calldata, &mut cache_db)?;
-        let revm_amount_out = decode_get_amount_out_response(revm_response)?;
-
-        println!(
-            "{} WETH -> USDC | REVM: {} | ETH_CALL: {}",
-            volume, revm_amount_out, call_amount_out
-        );
-
-        // 5️⃣ Xác minh chính xác
-        assert_eq!(revm_amount_out, call_amount_out);
-    }
-
-    Ok(())
-}
 
 
 

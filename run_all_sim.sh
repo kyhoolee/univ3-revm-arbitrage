@@ -3,22 +3,21 @@ set -e
 
 mkdir -p doc
 
-echo "Running simulate --method call"
-cargo run --bin simulate -- --method call > doc/sim_call.log
+# File log tổng
+ALL_LOG="doc/sim_all.log"
+echo "" > "$ALL_LOG"  # Clear file cũ nếu có
 
-echo "Running simulate --method revm"
-cargo run --bin simulate -- --method revm > doc/sim_revm.log
+# Cấu hình chain và method
+CHAINS=("eth" "avax")
+METHODS=("call" "revm" "anvil" "revm_cached" "revm_quoter" "validate")
 
-echo "Running simulate --method anvil"
-cargo run --bin simulate -- --method anvil > doc/sim_anvil.log
+for CHAIN in "${CHAINS[@]}"; do
+    echo "=== CHAIN = $CHAIN ===" | tee -a "$ALL_LOG"
+    for METHOD in "${METHODS[@]}"; do
+        echo "=== METHOD = $METHOD ===" | tee -a "$ALL_LOG"
+        RUSTFLAGS="-Awarnings" cargo run --bin simulate -- --method "$METHOD" --chain "$CHAIN" 2>&1 | tee -a "$ALL_LOG"
+        echo "" | tee -a "$ALL_LOG"
+    done
+done
 
-echo "Running simulate --method revm_cached"
-cargo run --bin simulate -- --method revm_cached > doc/sim_cached.log
-
-echo "Running simulate --method revm_quoter"
-cargo run --bin simulate -- --method revm_quoter > doc/sim_quoter.log
-
-echo "Running simulate --method validate"
-cargo run --bin simulate -- --method validate > doc/sim_validate.log
-
-echo "All simulations done. Logs in doc/"
+echo "All simulations done. Full log in $ALL_LOG"
