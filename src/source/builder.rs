@@ -90,7 +90,7 @@ pub fn build_tx_avalanche(
         .nonce(0)
         .gas_limit(1000000)
         .max_fee_per_gas(10*base_fee)
-        .max_priority_fee_per_gas(0)
+        .max_priority_fee_per_gas(base_fee * 2)
         .with_chain_id(chain_id) // Use Avalanche's chain ID (43114)
         .build_unsigned()
         .unwrap()

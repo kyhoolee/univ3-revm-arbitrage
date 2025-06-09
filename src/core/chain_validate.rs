@@ -1,39 +1,41 @@
 use std::sync::Arc;
 use std::ops::{Div, Mul};
 use std::str::FromStr;
+use alloy::eips::BlockId;
 use anyhow::Result;
-use alloy::providers::Provider;
 use alloy::{
     primitives::{Bytes, U256},
-    providers::ProviderBuilder,
+    providers::{Provider, ProviderBuilder},
 };
 use revm::primitives::Bytecode;
 
 use crate::types::{ChainConfig, ONE_ETHER};
 use crate::source::{builder::volumes, abi::*, builder::build_tx};
 use crate::core::db::*;
+use crate::core::logger::{measure_start, measure_end};
+use crate::chain::actors::ChainActors;
 
 /// So sánh kết quả quote từ `eth_call` và `revm`
 /// Dùng custom UniV3Quoter để đảm bảo REVM phản hồi `amountOut` đúng
-pub async fn run_eth_validate(config: &ChainConfig) -> Result<()> {
+pub async fn run_chain_validate(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
     // 1️⃣ Setup RPC và provider
     let provider = ProviderBuilder::new()
         .on_http(config.rpc_url.parse()?);
     let provider = Arc::new(provider);
-    // Tạo REVM cache database từ provider
 
+    // Tạo REVM cache database từ provider
     let mut cache_db = init_cache_db(provider.clone());
 
     let base_fee = provider.get_gas_price().await?;
-    let base_fee = base_fee.mul(110).div(100); // +10% để đảm bảo an toàn fee
+    let base_fee = base_fee.mul(110).div(100); // +10%
 
     // 2️⃣ Load address từ config
     let from = config.addr("ME")?;
-    let token_in = config.addr("WETH")?;
-    let token_out = config.addr("USDC")?;
-    let pool = config.addr("POOL_3000")?;
-    let quoter = config.addr("QUOTER")?;
-    let custom_quoter = config.addr("CUSTOM_QUOTER")?;
+    let token_in = config.addr(actors.native_token_key)?;
+    let token_out = config.addr(actors.stable_token_key)?;
+    let pool = config.addr(actors.pool_3000_key.expect("pool_3000_key required"))?;
+    let quoter = config.addr(actors.quoter_key)?;
+    let custom_quoter = config.addr(actors.custom_quoter_key.expect("custom_quoter_key required"))?;
 
     // 3️⃣ Chuẩn bị volume và mock data
     let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 10);
@@ -56,23 +58,26 @@ pub async fn run_eth_validate(config: &ChainConfig) -> Result<()> {
 
     // 4️⃣ So sánh từng volume
     for volume in volumes {
-        let call_calldata = quote_calldata(token_in, token_out, volume, 3000);
+        // Call onchain
+        let call_calldata = quote_calldata(token_in, token_out, volume, actors.default_fee);
         let tx = build_tx(quoter, from, call_calldata, base_fee);
-        let call_response = provider.call(&tx).await?;
+        let call_response = provider.call(&tx).block(BlockId::latest()).await?;
         let call_amount_out = decode_quote_response(call_response)?;
 
+        // Call REVM
         let revm_calldata = get_amount_out_calldata(pool, token_in, token_out, volume);
         let revm_response = revm_revert(from, custom_quoter, revm_calldata, &mut cache_db)?;
         let revm_amount_out = decode_get_amount_out_response(revm_response)?;
 
         println!(
-            "{} WETH -> USDC | REVM: {} | ETH_CALL: {}",
-            volume, revm_amount_out, call_amount_out
+            "{} {} -> {} | REVM: {} | ETH_CALL: {}",
+            volume, actors.native_token_key, actors.stable_token_key, revm_amount_out, call_amount_out
         );
 
         // 5️⃣ Xác minh chính xác
         assert_eq!(revm_amount_out, call_amount_out);
     }
 
+    measure_end(measure_start("chain_validate")); // Optional đo log nếu muốn
     Ok(())
 }

@@ -1,0 +1,70 @@
+.
+├── 1_refactor_mul_chain.sh
+├── 2_refactor_common_revm.sh
+├── all_bin.log
+├── all_src_dump.txt
+├── avax.log
+├── Cargo.lock
+├── Cargo.toml
+├── doc
+│   ├── 1.key_logic.md
+│   ├── 2.refactor.chain.md
+│   ├── 3.1.config.types.md
+│   ├── 3.2.logic.tasks.md
+│   ├── 3.refactor.task.md
+│   ├── 4.1.eth.cmp.report.md
+│   ├── 4.cmp.sims.md
+│   ├── 5.avax.task.md
+│   ├── sim_anvil.log
+│   ├── sim_cached.log
+│   ├── sim_call.log
+│   ├── sim_quoter.log
+│   ├── sim_revm.log
+│   └── sim_validate.log
+├── dump_src_core.sh
+├── dump_src.sh
+├── LICENSE.txt
+├── README.md
+├── run_all_bin.sh
+├── run_all_sim.sh
+├── src
+│   ├── bin
+│   │   ├── avax_call.rs
+│   │   ├── ronin_call.rs
+│   │   ├── sample_checksum.rs
+│   │   └── simulate.rs
+│   ├── bytecode
+│   │   ├── generic_erc20.hex
+│   │   └── uni_v3_quoter.hex
+│   ├── chain
+│   │   ├── actors.rs
+│   │   ├── avax.rs
+│   │   ├── eth.rs
+│   │   ├── mod.rs
+│   │   └── ronin.rs
+│   ├── config
+│   │   ├── avax.toml
+│   │   ├── eth.toml
+│   │   └── ronin.toml
+│   ├── contracts
+│   │   └── uni_v3_quoter.sol
+│   ├── core
+│   │   ├── anvil.rs
+│   │   ├── arbitrage.rs
+│   │   ├── call.rs
+│   │   ├── db.rs
+│   │   ├── logger.rs
+│   │   ├── mod.rs
+│   │   ├── revm_cached.rs
+│   │   ├── revm_quoter.rs
+│   │   ├── revm.rs
+│   │   └── validate.rs
+│   ├── lib.rs
+│   ├── source
+│   │   ├── abi.rs
+│   │   ├── builder.rs
+│   │   └── mod.rs
+│   └── types.rs
+└── tree_folder.txt
+
+10 directories, 58 files

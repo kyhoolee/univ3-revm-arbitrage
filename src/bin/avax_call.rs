@@ -9,7 +9,7 @@ use alloy::{
     transports::http::reqwest::Url,
 };
 
-use univ3_revm_arbitrage::chain::avax::*;
+use univ3_revm_arbitrage::{chain::avax::*, types::ONE_ETHER};
 use univ3_revm_arbitrage::source::*;
 
 
