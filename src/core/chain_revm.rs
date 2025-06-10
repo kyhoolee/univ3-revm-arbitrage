@@ -3,7 +3,7 @@ use std::ops::Div;
 use anyhow::Result;
 use alloy::{
     primitives::U256,
-    providers::{ProviderBuilder, RootProvider},
+    providers::{Provider, ProviderBuilder},
     transports::http::{Http, Client},
 };
 
@@ -12,16 +12,25 @@ use crate::source::{builder::volumes, abi::*};
 use crate::core::db::{init_cache_db, init_account, revm_call};
 use crate::core::logger::{measure_start, measure_end};
 use crate::chain::actors::ChainActors; // cần thêm import
+use crate::core::provider::MultiProvider;
 
 /// Mô phỏng quote swap từ UniswapV3 bằng `REVM` (multi-chain)
 pub async fn run_chain_revm(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
     // 1️⃣ Khởi tạo JSON-RPC provider để fetch bytecode từ chain thực
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
+    // let provider = ProviderBuilder::new()
+    //     .on_http(config.rpc_url.parse()?);
+    // let provider = Arc::new(provider);
 
-    // 2️⃣ Tạo REVM CacheDB từ provider chain thực
-    let mut cache_db = init_cache_db(provider.clone());
+    // // 2️⃣ Tạo REVM CacheDB từ provider chain thực
+    // let mut cache_db = init_cache_db(provider.clone());
+    let multi_provider = MultiProvider::new(&config.rpc_urls);
+    println!("MultiProvider with {} providers", multi_provider.len());
+
+    // let base_fee = provider.get_gas_price().await?;
+    let (provider, url) = multi_provider.next();
+    let base_fee = provider.get_gas_price().await?;
+
+    let mut cache_db = init_cache_db(&multi_provider);
 
     // 3️⃣ Địa chỉ dùng trong giao dịch (từ config + actors)
     let from = config.addr("ME")?;
@@ -33,7 +42,7 @@ pub async fn run_chain_revm(config: &ChainConfig, actors: &ChainActors) -> Resul
     let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
 
     // 5️⃣ Tải bytecode của contract quoter vào REVM memory state
-    init_account(quoter, &mut cache_db, provider.clone()).await?;
+    init_account(quoter, &mut cache_db, &multi_provider).await?;
 
     // 6️⃣ Mô phỏng lần đầu
     let start = measure_start("revm_first");

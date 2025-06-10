@@ -4,7 +4,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use alloy::{
     primitives::{Bytes, U256},
-    providers::{ProviderBuilder},
+    providers::{Provider, ProviderBuilder},
 };
 use revm::primitives::Bytecode;
 
@@ -13,18 +13,28 @@ use crate::source::{builder::volumes, abi::*};
 use crate::core::db::*;
 use crate::core::logger::{measure_start, measure_end};
 use crate::chain::actors::ChainActors;
+use crate::core::provider::MultiProvider;
 
 /// REVM mô phỏng UniswapV3 với dữ liệu cache:
 /// - Gán bytecode ERC20 giả cho token
 /// - Thêm balance thủ công vào REVM storage
 pub async fn run_chain_revm_cached(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
     // 1️⃣ Tạo JSON-RPC provider
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
+    // let provider = ProviderBuilder::new()
+    //     .on_http(config.rpc_url.parse()?);
+    // let provider = Arc::new(provider);
 
-    // 2️⃣ Tạo cache db từ REVM memory
-    let mut cache_db = init_cache_db(provider.clone());
+    // // 2️⃣ Tạo cache db từ REVM memory
+    // let mut cache_db = init_cache_db(provider.clone());
+    // let mut cache_db = init_cache_db(provider.clone());
+    let multi_provider = MultiProvider::new(&config.rpc_urls);
+    println!("MultiProvider with {} providers", multi_provider.len());
+
+    // let base_fee = provider.get_gas_price().await?;
+    let (provider, url) = multi_provider.next();
+    let base_fee = provider.get_gas_price().await?;
+
+    let mut cache_db = init_cache_db(&multi_provider);
 
     // 3️⃣ Địa chỉ cần dùng
     let from = config.addr("ME")?;
@@ -40,8 +50,8 @@ pub async fn run_chain_revm_cached(config: &ChainConfig, actors: &ChainActors) -
     let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
 
     // 5️⃣ Tải bytecode thật cho quoter + pool vào memory state
-    init_account(quoter, &mut cache_db, provider.clone()).await?;
-    init_account(pool, &mut cache_db, provider.clone()).await?;
+    init_account(quoter, &mut cache_db, &multi_provider).await?;
+    init_account(pool, &mut cache_db, &multi_provider).await?;
 
     // 6️⃣ Tải bytecode ERC20 giả
     let mocked_erc20 = include_str!("../bytecode/generic_erc20.hex");
