@@ -1,0 +1,643 @@
+
+=== CHAIN = eth ===
+=== METHOD = call ===
+
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded alloy-rpc-types-anvil v0.5.4
+  Downloaded alloy-rlp-derive v0.3.8
+  Downloaded alloy-signer v0.5.4
+  Downloaded alloy-network-primitives v0.5.4
+  Downloaded openssl-probe v0.1.5
+  Downloaded alloy-rpc-types v0.5.4
+  Downloaded equivalent v1.0.1
+  Downloaded sync_wrapper v1.0.1
+  Downloaded alloy-transport-ipc v0.5.4
+  Downloaded alloy-serde v0.5.4
+  Downloaded tinyvec_macros v0.1.1
+  Downloaded xxhash-rust v0.8.12
+  Downloaded rustc-hash v2.0.0
+  Downloaded thiserror v1.0.64
+  Downloaded strsim v0.11.1
+  Downloaded num-iter v0.1.45
+  Downloaded anstream v0.6.15
+  Downloaded tokio-macros v2.4.0
+  Downloaded walkdir v2.5.0
+  Downloaded spin v0.9.8
+  Downloaded smallvec v1.13.2
+  Downloaded tempfile v3.12.0
+  Downloaded tracing-attributes v0.1.27
+  Downloaded tokio-tungstenite v0.24.0
+  Downloaded strum_macros v0.26.4
+  Downloaded sha-1 v0.10.1
+  Downloaded substrate-bn v0.6.0
+  Downloaded tracing-core v0.1.32
+  Downloaded tower v0.4.13
+  Downloaded tokio-util v0.7.12
+  Downloaded ryu v1.0.18
+  Downloaded socket2 v0.5.7
+  Downloaded typenum v1.17.0
+  Downloaded tungstenite v0.24.0
+  Downloaded serde_derive v1.0.210
+  Downloaded syn-solidity v0.8.9
+  Downloaded pest v2.7.13
+  Downloaded secp256k1 v0.29.1
+  Downloaded revm v17.1.0
+  Downloaded reqwest v0.12.7
+  Downloaded rustls-webpki v0.102.8
+  Downloaded proptest v1.5.0
+  Downloaded webpki-roots v0.26.6
+  Downloaded syn v2.0.77
+  Downloaded idna v0.5.0
+  Downloaded openssl v0.10.66
+  Downloaded regex-syntax v0.8.4
+  Downloaded rustls v0.23.13
+  Downloaded rustix v0.38.37
+  Downloaded alloy-sol-type-parser v0.8.9
+  Downloaded alloy-sol-macro v0.8.9
+  Downloaded alloy-core v0.8.9
+  Downloaded unicode-width v0.1.14
+  Downloaded regex v1.10.6
+  Downloaded alloy-pubsub v0.5.4
+  Downloaded itertools v0.13.0
+  Downloaded winnow v0.6.18
+  Downloaded zerocopy v0.7.35
+  Downloaded libm v0.2.8
+  Downloaded regex-automata v0.4.7
+  Downloaded interprocess v2.2.1
+  Downloaded tokio v1.40.0
+  Downloaded unicode-normalization v0.1.24
+  Downloaded zerocopy-derive v0.7.35
+  Downloaded libc v0.2.158
+  Downloaded ruint v1.12.3
+  Downloaded mio v1.0.2
+  Downloaded miette v5.10.0
+  Downloaded alloy-eips v0.5.4
+  Downloaded blst v0.3.13
+  Downloaded revm-primitives v13.0.0
+  Downloaded unicode-bidi v0.3.15
+  Downloaded serde v1.0.210
+  Downloaded proc-macro2 v1.0.86
+  Downloaded openssl-sys v0.9.103
+  Downloaded indexmap v2.5.0
+  Downloaded hyper-util v0.1.8
+  Downloaded revm-interpreter v13.0.0
+  Downloaded alloy-genesis v0.5.4
+  Downloaded revm-precompile v14.0.0
+  Downloaded log v0.4.22
+  Downloaded url v2.5.2
+  Downloaded futures-util v0.3.30
+  Downloaded clap_builder v4.5.39
+  Downloaded aho-corasick v1.1.3
+  Downloaded tinyvec v1.8.0
+  Downloaded quote v1.0.37
+  Downloaded pin-project v1.1.5
+  Downloaded hyper v1.4.1
+  Downloaded toml_edit v0.22.21
+  Downloaded tower v0.5.1
+  Downloaded pin-project-internal v1.1.5
+  Downloaded once_cell v1.19.0
+  Downloaded native-tls v0.2.12
+  Downloaded hashbrown v0.15.0
+  Downloaded tracing v0.1.40
+  Downloaded hashbrown v0.13.2
+  Downloaded pin-project-lite v0.2.14
+  Downloaded http v1.1.0
+  Downloaded schnellru v0.2.3
+  Downloaded clap v4.5.39
+  Downloaded cc v1.1.21
+  Downloaded semver-parser v0.10.2
+  Downloaded ripemd v0.1.3
+  Downloaded parity-scale-codec v3.6.12
+  Downloaded linux-raw-sys v0.4.14
+  Downloaded unicode-ident v1.0.13
+  Downloaded base64 v0.21.7
+  Downloaded toml v0.8.19
+  Downloaded rustls-pki-types v1.8.0
+  Downloaded bytes v1.7.2
+  Downloaded alloy-sol-types v0.8.9
+  Downloaded alloy-primitives v0.8.9
+  Downloaded tokio-stream v0.1.16
+  Downloaded tokio-rustls v0.26.0
+  Downloaded ucd-trie v0.1.6
+  Downloaded proc-macro-crate v3.2.0
+  Downloaded ppv-lite86 v0.2.20
+  Downloaded parity-scale-codec-derive v3.6.12
+  Downloaded alloy-consensus v0.5.4
+  Downloaded allocator-api2 v0.2.18
+  Downloaded semver v1.0.23
+  Downloaded rustls-pemfile v2.1.3
+  Downloaded ipnet v2.10.0
+  Downloaded alloy-dyn-abi v0.8.9
+  Downloaded num-rational v0.4.2
+  Downloaded alloy-rpc-types-eth v0.5.4
+  Downloaded alloy-provider v0.5.4
+  Downloaded alloy-json-abi v0.8.9
+  Downloaded memmap2 v0.5.10
+  Downloaded futures v0.3.30
+  Downloaded crossbeam-utils v0.8.20
+  Downloaded cacache v13.0.0
+  Downloaded secp256k1-sys v0.10.1
+  Downloaded bitflags v2.6.0
+  Downloaded anyhow v1.0.89
+  Downloaded ahash v0.8.11
+  Downloaded valuable v0.1.0
+  Downloaded colorchoice v1.0.2
+  Downloaded bimap v0.6.3
+  Downloaded aurora-engine-modexp v1.1.0
+  Downloaded anstyle v1.0.8
+  Downloaded serde_spanned v0.6.8
+  Downloaded same-file v1.0.6
+  Downloaded num-complex v0.4.6
+  Downloaded httparse v1.9.4
+  Downloaded http-body-util v0.1.2
+  Downloaded cpufeatures v0.2.14
+  Downloaded base64ct v1.6.0
+  Downloaded alloy-sol-macro-expander v0.8.9
+  Downloaded itoa v1.0.11
+  Downloaded impl-trait-for-tuples v0.2.2
+  Downloaded futures-core v0.3.30
+  Downloaded futures-channel v0.3.30
+  Downloaded env_logger v0.11.5
+  Downloaded clap_derive v4.5.32
+  Downloaded auto_impl v1.2.0
+  Downloaded async-trait v0.1.82
+  Downloaded ssri v9.2.0
+  Downloaded rustversion v1.0.17
+  Downloaded pkg-config v0.3.30
+  Downloaded miette-derive v5.10.0
+  Downloaded utf8parse v0.2.2
+  Downloaded futures-macro v0.3.30
+  Downloaded ethaddr v0.2.2
+  Downloaded anstyle-parse v0.2.5
+  Downloaded reflink-copy v0.1.19
+  Downloaded is_terminal_polyfill v1.70.1
+  Downloaded humantime v2.1.0
+  Downloaded futures-executor v0.3.30
+  Downloaded fastrand v2.1.1
+  Downloaded const-hex v1.12.0
+  Downloaded clap_lex v0.7.4
+  Downloaded bit-vec v0.6.3
+  Downloaded bit-set v0.5.3
+  Downloaded alloy-transport v0.5.4
+  Downloaded alloy-contract v0.5.4
+  Downloaded alloy-chains v0.1.33
+  Downloaded ring v0.17.8
+  Downloaded num v0.4.3
+  Downloaded futures-io v0.3.30
+  Downloaded errno v0.3.9
+  Downloaded env_filter v0.1.2
+  Downloaded enumn v0.1.14
+  Downloaded dyn-clone v1.0.17
+  Downloaded data-encoding v2.6.0
+  Downloaded autocfg v1.3.0
+  Downloaded alloy-signer-local v0.5.4
+  Downloaded wait-timeout v0.2.0
+  Downloaded hex-literal v0.4.1
+  Downloaded futures-sink v0.3.30
+  Downloaded ff v0.13.0
+  Downloaded either v1.13.0
+  Downloaded async-stream v0.3.5
+  Downloaded anstyle-query v1.1.1
+  Downloaded sync_wrapper v0.1.2
+  Downloaded futures-task v0.3.30
+  Downloaded foldhash v0.1.3
+  Downloaded alloy-sol-macro-input v0.8.9
+  Downloaded alloy-node-bindings v0.5.4
+  Downloaded alloy-rpc-types-engine v0.5.4
+  Downloaded alloy-rpc-client v0.5.4
+  Downloaded alloy-rlp v0.3.8
+  Downloaded alloy-network v0.5.4
+  Downloaded alloy-json-rpc v0.5.4
+  Downloaded alloy v0.5.4
+  Downloaded strum v0.26.3
+  Downloaded lru v0.12.4
+  Downloaded doctest-file v1.0.0
+  Downloaded crunchy v0.2.2
+  Downloaded byte-slice-cast v1.2.2
+  Downloaded async-stream-impl v0.3.5
+  Downloaded alloy-transport-ws v0.5.4
+  Downloaded alloy-transport-http v0.5.4
+  Downloaded alloy-eip7702 v0.3.2
+  Downloaded thiserror-impl v1.0.64
+   Compiling proc-macro2 v1.0.86
+   Compiling unicode-ident v1.0.13
+   Compiling cfg-if v1.0.0
+   Compiling libc v0.2.158
+   Compiling serde v1.0.210
+   Compiling version_check v0.9.5
+   Compiling typenum v1.17.0
+   Compiling subtle v2.6.1
+   Compiling const-oid v0.9.6
+   Compiling itoa v1.0.11
+   Compiling cpufeatures v0.2.14
+   Compiling autocfg v1.3.0
+   Compiling once_cell v1.19.0
+   Compiling shlex v1.3.0
+   Compiling crunchy v0.2.2
+   Compiling paste v1.0.15
+   Compiling unicode-xid v0.2.6
+   Compiling cc v1.1.21
+   Compiling tiny-keccak v2.0.2
+   Compiling memchr v2.7.4
+   Compiling ruint-macro v1.2.1
+   Compiling generic-array v0.14.7
+   Compiling hex-literal v0.4.1
+   Compiling base16ct v0.2.0
+   Compiling arrayvec v0.7.6
+   Compiling foldhash v0.1.3
+   Compiling pin-project-lite v0.2.14
+   Compiling ryu v1.0.18
+   Compiling futures-core v0.3.30
+   Compiling lock_api v0.4.12
+   Compiling parking_lot_core v0.9.10
+   Compiling scopeguard v1.2.0
+   Compiling smallvec v1.13.2
+   Compiling serde_json v1.0.140
+   Compiling heck v0.5.0
+   Compiling byteorder v1.5.0
+   Compiling futures-sink v0.3.30
+   Compiling slab v0.4.9
+   Compiling quote v1.0.37
+   Compiling equivalent v1.0.1
+   Compiling winnow v0.6.18
+   Compiling futures-channel v0.3.30
+   Compiling pin-utils v0.1.0
+   Compiling thiserror v1.0.64
+   Compiling futures-io v0.3.30
+   Compiling syn v2.0.77
+   Compiling futures-task v0.3.30
+   Compiling proc-macro-error-attr2 v2.0.0
+   Compiling dunce v1.0.5
+   Compiling hashbrown v0.14.5
+   Compiling bitflags v2.6.0
+   Compiling tracing-core v0.1.32
+   Compiling hex v0.4.3
+   Compiling fnv v1.0.7
+   Compiling tinyvec_macros v0.1.1
+   Compiling blst v0.3.13
+   Compiling c-kzg v1.0.3
+   Compiling pkg-config v0.3.30
+   Compiling getrandom v0.2.15
+   Compiling mio v1.0.2
+   Compiling rand_core v0.6.4
+   Compiling parking_lot v0.12.3
+   Compiling signal-hook-registry v1.4.2
+   Compiling socket2 v0.5.7
+   Compiling ff v0.13.0
+   Compiling indexmap v2.5.0
+   Compiling num_cpus v1.16.0
+   Compiling group v0.13.0
+   Compiling vcpkg v0.2.15
+   Compiling threadpool v1.8.1
+   Compiling tinyvec v1.8.0
+   Compiling log v0.4.22
+   Compiling tower-layer v0.3.3
+   Compiling percent-encoding v2.3.1
+   Compiling tower-service v0.3.3
+   Compiling spin v0.9.8
+   Compiling httparse v1.9.4
+   Compiling rustls-pki-types v1.8.0
+   Compiling ring v0.17.8
+   Compiling unicode-bidi v0.3.15
+   Compiling form_urlencoded v1.2.1
+   Compiling ahash v0.8.11
+   Compiling unicode-normalization v0.1.24
+   Compiling openssl v0.10.66
+   Compiling base64 v0.22.1
+   Compiling foreign-types-shared v0.1.1
+   Compiling untrusted v0.9.0
+   Compiling futures-utils-wasm v0.1.0
+   Compiling foreign-types v0.3.2
+   Compiling num-traits v0.2.19
+   Compiling rustls v0.23.13
+   Compiling openssl-sys v0.9.103
+   Compiling native-tls v0.2.12
+   Compiling try-lock v0.2.5
+   Compiling sync_wrapper v0.1.2
+   Compiling want v0.3.1
+   Compiling allocator-api2 v0.2.18
+   Compiling either v1.13.0
+   Compiling openssl-probe v0.1.5
+   Compiling rustix v0.38.37
+   Compiling idna v0.5.0
+   Compiling linux-raw-sys v0.4.14
+   Compiling rustversion v1.0.17
+   Compiling itertools v0.13.0
+   Compiling bimap v0.6.3
+   Compiling utf-8 v0.7.6
+   Compiling data-encoding v2.6.0
+   Compiling url v2.5.2
+   Compiling rustls-pemfile v2.1.3
+   Compiling webpki-roots v0.26.6
+   Compiling sync_wrapper v1.0.1
+   Compiling crossbeam-utils v0.8.20
+   Compiling doctest-file v1.0.0
+   Compiling num-integer v0.1.46
+   Compiling fastrand v2.1.1
+   Compiling radium v0.7.0
+   Compiling ipnet v2.10.0
+   Compiling mime v0.3.17
+   Compiling tap v1.0.1
+   Compiling num-bigint v0.4.6
+   Compiling wyz v0.5.1
+   Compiling secp256k1-sys v0.10.1
+   Compiling hashbrown v0.13.2
+   Compiling funty v2.0.0
+   Compiling utf8parse v0.2.2
+   Compiling anstyle-parse v0.2.5
+   Compiling num-iter v0.1.45
+   Compiling num-complex v0.4.6
+   Compiling aho-corasick v1.1.3
+   Compiling syn-solidity v0.8.9
+   Compiling proc-macro-error2 v2.0.1
+   Compiling anstyle-query v1.1.1
+   Compiling bitvec v1.0.1
+   Compiling dyn-clone v1.0.17
+   Compiling colorchoice v1.0.2
+   Compiling anstyle v1.0.8
+   Compiling regex-syntax v0.8.4
+   Compiling is_terminal_polyfill v1.70.1
+   Compiling anstream v0.6.15
+   Compiling lazy_static v1.5.0
+   Compiling unicode-width v0.1.14
+   Compiling rustc-hex v2.1.0
+   Compiling strsim v0.11.1
+   Compiling tempfile v3.12.0
+   Compiling num-rational v0.4.2
+   Compiling same-file v1.0.6
+   Compiling num v0.4.3
+   Compiling base64 v0.21.7
+   Compiling aurora-engine-modexp v1.1.0
+   Compiling anyhow v1.0.89
+   Compiling clap_lex v0.7.4
+   Compiling xxhash-rust v0.8.12
+   Compiling clap_builder v4.5.39
+   Compiling regex-automata v0.4.7
+   Compiling walkdir v2.5.0
+   Compiling rustls-webpki v0.102.8
+   Compiling reflink-copy v0.1.19
+   Compiling memmap2 v0.5.10
+   Compiling serde_derive v1.0.210
+   Compiling zeroize_derive v1.4.2
+   Compiling derive_more-impl v1.0.0
+   Compiling alloy-rlp-derive v0.3.8
+   Compiling zerocopy-derive v0.7.35
+   Compiling tokio-macros v2.4.0
+   Compiling futures-macro v0.3.30
+   Compiling thiserror-impl v1.0.64
+   Compiling zeroize v1.8.1
+   Compiling der v0.7.9
+   Compiling tracing-attributes v0.1.27
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.6
+   Compiling crypto-bigint v0.5.5
+   Compiling digest v0.10.7
+   Compiling zerocopy v0.7.35
+   Compiling futures-util v0.3.30
+   Compiling hmac v0.12.1
+   Compiling sha2 v0.10.8
+   Compiling rfc6979 v0.4.0
+   Compiling signature v2.2.0
+   Compiling sec1 v0.7.3
+   Compiling spki v0.7.3
+   Compiling ppv-lite86 v0.2.20
+   Compiling auto_impl v1.2.0
+   Compiling pin-project-internal v1.1.5
+   Compiling openssl-macros v0.1.1
+   Compiling rand_chacha v0.3.1
+   Compiling tracing v0.1.40
+   Compiling elliptic-curve v0.13.8
+   Compiling rand v0.8.5
+   Compiling ecdsa v0.16.9
+   Compiling k256 v0.13.4
+   Compiling sha1 v0.10.6
+   Compiling pin-project v1.1.5
+   Compiling async-trait v0.1.82
+   Compiling num_enum_derive v0.7.3
+   Compiling strum_macros v0.26.4
+   Compiling futures-executor v0.3.30
+   Compiling derive_more v1.0.0
+   Compiling tower v0.5.1
+   Compiling futures v0.3.30
+   Compiling async-stream-impl v0.3.5
+   Compiling lru v0.12.4
+   Compiling dashmap v6.1.0
+   Compiling schnellru v0.2.3
+   Compiling enumn v0.1.14
+   Compiling num_enum v0.7.3
+   Compiling miette-derive v5.10.0
+   Compiling substrate-bn v0.6.0
+   Compiling regex v1.10.6
+   Compiling async-stream v0.3.5
+   Compiling secp256k1 v0.29.1
+   Compiling sha-1 v0.10.1
+   Compiling ripemd v0.1.3
+   Compiling env_filter v0.1.2
+   Compiling clap_derive v4.5.32
+   Compiling humantime v2.1.0
+   Compiling env_logger v0.11.5
+   Compiling ethaddr v0.2.2
+   Compiling strum v0.26.3
+   Compiling alloy-chains v0.1.33
+   Compiling miette v5.10.0
+   Compiling bytes v1.7.2
+   Compiling const-hex v1.12.0
+   Compiling hashbrown v0.15.0
+   Compiling alloy-sol-type-parser v0.8.9
+   Compiling serde_urlencoded v0.7.1
+   Compiling toml_datetime v0.6.8
+   Compiling serde_spanned v0.6.8
+   Compiling ruint v1.12.3
+   Compiling toml_edit v0.22.21
+   Compiling ssri v9.2.0
+   Compiling clap v4.5.39
+   Compiling alloy-rlp v0.3.8
+   Compiling tokio v1.40.0
+   Compiling http v1.1.0
+   Compiling alloy-primitives v0.8.9
+   Compiling http-body v1.0.1
+   Compiling tungstenite v0.24.0
+   Compiling http-body-util v0.1.2
+   Compiling alloy-json-abi v0.8.9
+   Compiling alloy-eip2930 v0.1.0
+   Compiling alloy-eip7702 v0.3.2
+   Compiling alloy-serde v0.5.4
+   Compiling alloy-signer v0.5.4
+   Compiling toml v0.8.19
+   Compiling alloy-sol-macro-input v0.8.9
+   Compiling alloy-genesis v0.5.4
+   Compiling alloy-eips v0.5.4
+   Compiling alloy-rpc-types-anvil v0.5.4
+   Compiling revm-primitives v13.0.0
+   Compiling alloy-sol-macro-expander v0.8.9
+   Compiling alloy-node-bindings v0.5.4
+   Compiling revm-interpreter v13.0.0
+   Compiling revm-precompile v14.0.0
+   Compiling alloy-consensus v0.5.4
+   Compiling alloy-network-primitives v0.5.4
+   Compiling alloy-sol-macro v0.8.9
+   Compiling tokio-util v0.7.12
+   Compiling tower v0.4.13
+   Compiling hyper v1.4.1
+   Compiling tokio-native-tls v0.3.1
+   Compiling tokio-rustls v0.26.0
+   Compiling interprocess v2.2.1
+   Compiling tokio-tungstenite v0.24.0
+   Compiling tokio-stream v0.1.16
+   Compiling cacache v13.0.0
+   Compiling hyper-util v0.1.8
+   Compiling alloy-sol-types v0.8.9
+   Compiling hyper-tls v0.6.0
+   Compiling reqwest v0.12.7
+   Compiling alloy-json-rpc v0.5.4
+   Compiling alloy-rpc-types-eth v0.5.4
+   Compiling alloy-dyn-abi v0.8.9
+   Compiling alloy-transport v0.5.4
+   Compiling alloy-core v0.8.9
+   Compiling alloy-pubsub v0.5.4
+   Compiling alloy-transport-http v0.5.4
+   Compiling alloy-transport-ipc v0.5.4
+   Compiling alloy-transport-ws v0.5.4
+   Compiling alloy-rpc-client v0.5.4
+   Compiling alloy-network v0.5.4
+   Compiling alloy-rpc-types v0.5.4
+   Compiling alloy-signer-local v0.5.4
+   Compiling alloy-provider v0.5.4
+   Compiling alloy-contract v0.5.4
+   Compiling revm v17.1.0
+   Compiling alloy v0.5.4
+   Compiling univ3-revm-arbitrage v0.0.0 (/home/ubuntu/avax_mev/univ3-revm-arbitrage)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 14s
+     Running `target/debug/simulate --method call --chain eth`
+100000000000000000 WETH -> USDC 252666527
+80000000000000000 WETH -> USDC 202133252
+60000000000000000 WETH -> USDC 151599962
+40000000000000000 WETH -> USDC 101066657
+20000000000000000 WETH -> USDC 50533336
+Elapsed: 3.15s for 'chain_call'
+
+=== METHOD = revm ===
+warning: unused manifest key: bin.0.clap
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.62s
+     Running `target/debug/simulate --method revm --chain eth`
+Error: database error: HTTP error 429 with body: error code: 1015
+
+Caused by:
+    0: HTTP error 429 with body: error code: 1015
+    1: HTTP error 429 with body: error code: 1015
+
+=== METHOD = anvil ===
+warning: unused manifest key: bin.0.clap
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running `target/debug/simulate --method anvil --chain eth`
+Error: HTTP error 429 with body: error code: 1015
+
+Caused by:
+    HTTP error 429 with body: error code: 1015
+
+=== METHOD = revm_cached ===
+warning: unused manifest key: bin.0.clap
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.22s
+     Running `target/debug/simulate --method revm_cached --chain eth`
+from=0x0000000000000000000000000000000000000001 token_in=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 token_out=0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48 quoter=0x61ffe014ba17989e743c5f6cb21bf9697530b21e pool=0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8
+Error: HTTP error 429 with body: error code: 1015
+
+Caused by:
+    HTTP error 429 with body: error code: 1015
+
+=== METHOD = revm_quoter ===
+warning: unused manifest key: bin.0.clap
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.31s
+     Running `target/debug/simulate --method revm_quoter --chain eth`
+Error: HTTP error 429 with body: error code: 1015
+
+Caused by:
+    HTTP error 429 with body: error code: 1015
+
+=== METHOD = validate ===
+warning: unused manifest key: bin.0.clap
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.22s
+     Running `target/debug/simulate --method validate --chain eth`
+Error: HTTP error 429 with body: error code: 1015
+
+Caused by:
+    HTTP error 429 with body: error code: 1015
+
+=== CHAIN = avax ===
+=== METHOD = call ===
+warning: unused manifest key: bin.0.clap
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.21s
+     Running `target/debug/simulate --method call --chain avax`
+100000000000000000 WAVAX -> USDC 2080317
+80000000000000000 WAVAX -> USDC 1664259
+60000000000000000 WAVAX -> USDC 1248198
+40000000000000000 WAVAX -> USDC 832134
+20000000000000000 WAVAX -> USDC 416068
+Elapsed: 4.32s for 'chain_call'
+
+=== METHOD = revm ===
+warning: unused manifest key: bin.0.clap
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.71s
+     Running `target/debug/simulate --method revm --chain avax`
+100000000000000000 WAVAX -> USDC 2080317
+Elapsed: 911.64ms for 'revm_first'
+100000000000000000 WAVAX -> USDC 2080317
+80000000000000000 WAVAX -> USDC 1664259
+60000000000000000 WAVAX -> USDC 1248198
+40000000000000000 WAVAX -> USDC 832134
+20000000000000000 WAVAX -> USDC 416068
+Elapsed: 910.16ms for 'revm_loop'
+
+=== METHOD = anvil ===
+warning: unused manifest key: bin.0.clap
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
+     Running `target/debug/simulate --method anvil --chain avax`
+
+thread 'main' panicked at /home/ubuntu/avax_mev/univ3-revm-arbitrage/src/core/chain_anvil.rs:34:10:
+called `Result::unwrap()` on an `Err` value: SpawnError(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+=== METHOD = revm_cached ===
+warning: unused manifest key: bin.0.clap
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s
+     Running `target/debug/simulate --method revm_cached --chain avax`
+from=0x0000000000000000000000000000000000000001 token_in=0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7 token_out=0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e quoter=0xbe0f5544ec67e9b3b2d979aaa43f18fd87e6257f pool=0x0e663593657b064e1bae76d28625df5d0ebd4421
+100000000000000000 WAVAX -> USDC 2080317
+Elapsed: 404.15ms for 'revm_cached_first'
+100000000000000000 WAVAX -> USDC 2080317
+80000000000000000 WAVAX -> USDC 1664259
+60000000000000000 WAVAX -> USDC 1248198
+40000000000000000 WAVAX -> USDC 832134
+20000000000000000 WAVAX -> USDC 416068
+Elapsed: 736.75ms for 'revm_cached_loop'
+
+=== METHOD = revm_quoter ===
+warning: unused manifest key: bin.0.clap
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running `target/debug/simulate --method revm_quoter --chain avax`
+100000000000000000 WAVAX -> USDC 2080317
+Elapsed: 409.62ms for 'chain_revm_quoter_first'
+100000000000000000 WAVAX -> USDC 2080317
+80000000000000000 WAVAX -> USDC 1664259
+60000000000000000 WAVAX -> USDC 1248198
+40000000000000000 WAVAX -> USDC 832134
+20000000000000000 WAVAX -> USDC 416068
+Elapsed: 241.07ms for 'chain_revm_quoter_loop'
+
+=== METHOD = validate ===
+warning: unused manifest key: bin.0.clap
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.21s
+     Running `target/debug/simulate --method validate --chain avax`
+100000000000000000 WAVAX -> USDC | REVM: 2080317 | ETH_CALL: 2080317
+90000000000000000 WAVAX -> USDC | REVM: 1872288 | ETH_CALL: 1872288
+80000000000000000 WAVAX -> USDC | REVM: 1664259 | ETH_CALL: 1664259
+70000000000000000 WAVAX -> USDC | REVM: 1456229 | ETH_CALL: 1456229
+60000000000000000 WAVAX -> USDC | REVM: 1248198 | ETH_CALL: 1248198
+50000000000000000 WAVAX -> USDC | REVM: 1040166 | ETH_CALL: 1040166
+40000000000000000 WAVAX -> USDC | REVM: 832134 | ETH_CALL: 832134
+30000000000000000 WAVAX -> USDC | REVM: 624102 | ETH_CALL: 624102
+20000000000000000 WAVAX -> USDC | REVM: 416068 | ETH_CALL: 416068
+10000000000000000 WAVAX -> USDC | REVM: 208034 | ETH_CALL: 208034
+Elapsed: 41.00ns for 'chain_validate'
+
