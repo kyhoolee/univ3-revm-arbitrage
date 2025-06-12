@@ -16,6 +16,32 @@ use std::sync::Arc;
 pub type AlloyCacheDB =
     CacheDB<AlloyDB<Http<Client>, Ethereum, Arc<RootProvider<Http<Client>>>>>;
 
+
+use revm::db::{ EmptyDBTyped};
+use std::convert::Infallible;
+
+use crate::core::db_empty::InMemoryDB;
+
+/// Convert CacheDB<AlloyDB> → CacheDB<EmptyDBTyped<Infallible>>
+pub fn convert_cache_to_empty_db<DB>(src: &CacheDB<DB>) -> CacheDB<EmptyDBTyped<Infallible>> {
+    let mut new_db = CacheDB::new(EmptyDBTyped::<Infallible>::default());
+
+    // Clone account info + storage
+    for (addr, db_account) in &src.accounts {
+        // Clone account info
+        new_db.insert_account_info(*addr, db_account.info.clone());
+
+        // Clone storage
+        for (slot, value) in &db_account.storage {
+            new_db.insert_account_storage(*addr, *slot, *value).expect("insert_account_storage failed");
+        }
+    }
+
+    new_db
+}
+
+
+
 pub fn init_cache_db(provider: Arc<RootProvider<Http<Client>>>) -> AlloyCacheDB {
     CacheDB::new(AlloyDB::new(provider, Default::default()).unwrap())
 }
@@ -108,6 +134,41 @@ pub fn revm_call(
 
     Ok(value)
 }
+
+
+
+pub fn revm_call_db(
+    from: Address,
+    to: Address,
+    calldata: Bytes,
+    cache_db: &mut InMemoryDB,
+) -> Result<Bytes> {
+    let mut evm = Evm::builder()
+        .with_db(cache_db)
+        .modify_tx_env(|tx| {
+            tx.caller = from;
+            tx.transact_to = TransactTo::Call(to);
+            tx.data = calldata;
+            tx.value = U256::ZERO;
+        })
+        .build();
+
+    let result = evm.transact()?.result;
+
+    let value = match result {
+        ExecutionResult::Success {
+            output: Output::Call(value),
+            ..
+        } => value,
+        result => {
+            return Err(anyhow!("execution failed: {result:?}"));
+        }
+    };
+
+    Ok(value)
+}
+
+
 
 pub fn revm_revert(
     from: Address,

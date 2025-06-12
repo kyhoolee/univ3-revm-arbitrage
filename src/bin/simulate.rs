@@ -6,6 +6,7 @@ use univ3_revm_arbitrage::core::{
     chain_anvil::run_chain_anvil,
     chain_revm::run_chain_revm,
     chain_revm_cached::run_chain_revm_cached,
+    chain_revm_cached::run_chain_revm_snapshot_parallel, // ADD LINE
     chain_revm_quoter::run_chain_revm_quoter,
     chain_arbitrage::run_chain_arbitrage,
     chain_validate::run_chain_validate,
@@ -39,6 +40,7 @@ async fn main() -> anyhow::Result<()> {
         "anvil" => run_chain_anvil(&config, &actors).await?,
         "revm" => run_chain_revm(&config, &actors).await?,
         "revm_cached" => run_chain_revm_cached(&config, &actors).await?,
+        "revm_cached_parallel" => run_chain_revm_snapshot_parallel(&config, &actors).await?, // ADD LINE
         "revm_quoter" => run_chain_revm_quoter(&config, &actors).await?,
         "arbitrage" => run_chain_arbitrage(&config, &actors).await?,
         "validate" => run_chain_validate(&config, &actors).await?,
