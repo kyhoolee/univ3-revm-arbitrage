@@ -4,7 +4,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use alloy::{
     primitives::{Bytes, U256},
-    providers::ProviderBuilder,
+    providers::{Provider, ProviderBuilder},
 };
 use revm::primitives::Bytecode;
 
@@ -13,15 +13,24 @@ use crate::source::{builder::volumes, abi::*};
 use crate::core::db::*;
 use crate::core::logger::{measure_start, measure_end};
 use crate::chain::actors::ChainActors;
+use crate::core::provider::MultiProvider;
 
 /// REVM chạy quote bằng custom UniV3Quoter contract (trả kết quả qua revert), multi-chain version
 pub async fn run_chain_revm_quoter(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
     // 1️⃣ Setup provider và cache db
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
+    // let provider = ProviderBuilder::new()
+    //     .on_http(config.rpc_url.parse()?);
+    // let provider = Arc::new(provider);
 
-    let mut cache_db = init_cache_db(provider.clone());
+    // let mut cache_db = init_cache_db(provider.clone());
+    let multi_provider = MultiProvider::new(&config.rpc_urls);
+    println!("MultiProvider with {} providers", multi_provider.len());
+
+    // let base_fee = provider.get_gas_price().await?;
+    let (provider, url) = multi_provider.next();
+    let base_fee = provider.get_gas_price().await?;
+
+    let mut cache_db = init_cache_db(&multi_provider);
 
     // 2️⃣ Đọc address từ config
     let from = config.addr("ME")?;
@@ -34,8 +43,8 @@ pub async fn run_chain_revm_quoter(config: &ChainConfig, actors: &ChainActors) -
     let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
 
     // 4️⃣ Load bytecode thật và giả vào REVM
-    init_account(from, &mut cache_db, provider.clone()).await?;
-    init_account(pool, &mut cache_db, provider.clone()).await?;
+    init_account(from, &mut cache_db, &multi_provider).await?;
+    init_account(pool, &mut cache_db, &multi_provider).await?;
 
     let mocked_erc20 = include_str!("../bytecode/generic_erc20.hex");
     let mocked_erc20 = Bytecode::new_raw(Bytes::from_str(mocked_erc20)?);

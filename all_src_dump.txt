@@ -1,280 +1,4 @@
 
-==================== src/bin/avax_call.rs ====================
-use std::sync::Arc;
-use std::ops::Div;
-
-use anyhow::Result;
-use alloy::{
-    eips::BlockId,
-    primitives::U256,
-    providers::{Provider, ProviderBuilder},
-    transports::http::reqwest::Url,
-};
-
-use univ3_revm_arbitrage::{chain::avax::*, types::ONE_ETHER};
-use univ3_revm_arbitrage::source::*;
-
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    env_logger::init();
-
-    let rpc = "https://api.avax.network/ext/bc/C/rpc";
-    let provider = ProviderBuilder::new().on_http(Url::parse(rpc)?);
-    let provider = Arc::new(provider);
-
-    let base_fee = provider.get_gas_price().await?;
-
-    let volume = ONE_ETHER.div(U256::from(10));
-    let calldata = quote_calldata(WAVAX_ADDR, USDC_ADDR, volume, 3000);
-    let tx = build_tx_avalanche(V3_QUOTER_ADDR, ME, calldata, base_fee, Some(CHAIN_ID));
-
-    let start = measure_start("avax_call");
-    println!("\ntx: {:?}", tx);
-
-    let call = provider.call(&tx).block(BlockId::latest());
-    println!("\ncall: {:?}", call);
-    let call = call.await?;
-    println!("\nresponse: {:?}", call);
-
-    let amount_out = decode_quote_response(call)?;
-    println!("{} WAVAX -> USDC {}", volume, amount_out);
-
-    measure_end(start);
-    Ok(())
-}
-
-
-
-==================== src/bin/ronin_call.rs ====================
-use alloy::{
-    primitives::U256,
-    providers::{Provider, ProviderBuilder}, transports::http::reqwest::Url,
-};
-// use source::build_tx_ronin;
-use std::sync::Arc;
-// pub mod source;
-use anyhow::Result;
-use std::ops::Div;
-use alloy::eips::BlockId;
-use alloy::primitives::{address, Address};
-
-use univ3_revm_arbitrage::{source::*, types::ONE_ETHER};
-use univ3_revm_arbitrage::chain::ronin::*;
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    env_logger::init();
-
-    // let rpc = std::env::var("ETH_RPC_URL").unwrap().parse()?;
-    // "";
-    // ETH_RPC_URL = 'https://ronin.gateway.tenderly.co/7dNLdBPOaPCaNqVx5pZ10s'
-    // QUOTER_ADDRESS = '0x84ab2f9fdc4bf66312b0819d879437b8749efdf2'
-    // let rpc = "https://eth.merkle.io";
-    // let rpc = "https://api.avax.network/ext/bc/C/rpc";
-    // let rpc = "http://10.0.1.50:8745";
-    let rpc = "https://ronin.gateway.tenderly.co/7dNLdBPOaPCaNqVx5pZ10s";
-
-    // let provider = ProviderBuilder::new().on_http(std::env::var("ETH_RPC_URL").unwrap().parse()?);
-    let provider = ProviderBuilder::new().on_http(Url::parse(rpc)?);
-    let provider = Arc::new(provider);
-
-    let base_fee = provider.get_gas_price().await?;
-
-    let volume = ONE_ETHER.div(U256::from(100));
-
-    // # "tokenIn": "0xc99a6A985eD2Cac1ef41640596C5A5f9F4E19Ef5",  # Ronin WETH
-    // # "tokenOut": "0xe514d9DEB7966c8BE0ca922de8a064264eA6bcd4",  # Wrapped Ronin
-
-    let token_in: Address = address!("c99a6A985eD2Cac1ef41640596C5A5f9F4E19Ef5"); // WETH
-    let token_out: Address = address!("e514d9DEB7966c8BE0ca922de8a064264eA6bcd4"); // WRON
-
-    // let token_in: Address = address!("0b7007c13325c48911f73a2dad5fa5dcbf808adc"); // USDC
-    // let token_out: Address = address!("97a9107c1793bc407d6f527b77e7fff4d812bece"); // AXS
-
-
-    let quoter_address: Address = address!("84ab2f9fdc4bf66312b0819d879437b8749efdf2"); // Quoter
-
-    // let calldata = quote_calldata(WETH_ADDR, USDC_ADDR, volume, 3000);
-    // let calldata = quote_calldata(token_in, token_out, volume, 3000);
-    println!("volume: {}", volume);
-    let calldata = quote_exact_input_single_calldata(token_in, token_out, volume, 3000);
-    println!("calldata: {:?}", calldata);
-
-
-    println!("\n---------\nBlock: {}", provider.get_block_number().await?);
-    // Block: 42488999
-    println!("base_fee: {}", base_fee);
-
-    // let tx = build_tx(quoterAddress, ME, calldata, base_fee);
-    let chain_id = 2021;
-    let wallet = address!("ebe94ab981899efbc8bb6cb2b045fc7490726ff3");
-    let tx = build_tx_ronin(quoter_address, ME, calldata, base_fee, Some(chain_id));
-    let start = measure_start("eth_call_one");
-    println!("tx: {:?}", tx);
-    let call = provider.call(&tx).block(BlockId::latest());
-    println!("call: {:?}", call);
-    let call = call.await?;
-    println!("call: {:?}", call);   
-    let amount_out = decode_quote_response(call)?;
-    println!("{} WETH -> WRON {}", volume, amount_out);
-    // println!("{} WETH -> USDC {}", volume, amount_out);
-
-    measure_end(start);
-
-    Ok(())
-}
-
-
-
-==================== src/bin/simulate.rs ====================
-use clap::Parser;
-use univ3_revm_arbitrage::chain::actors::get_chain_actors;
-use univ3_revm_arbitrage::types::{load_chain_config, ChainConfig};
-use univ3_revm_arbitrage::core::{
-    chain_call::run_chain_call,
-    chain_anvil::run_chain_anvil,
-    chain_revm::run_chain_revm,
-    chain_revm_cached::run_chain_revm_cached,
-    chain_revm_quoter::run_chain_revm_quoter,
-    chain_arbitrage::run_chain_arbitrage,
-    chain_validate::run_chain_validate,
-};
-
-#[derive(Parser, Debug)]
-#[command(author = "Kyhoolee", version = "1.0", about = "Simulate EVM quote/arbitrage")]
-struct Args {
-    /// Tên chain (eth, avax, ronin)
-    #[arg(long, default_value = "eth")]
-    chain: String,
-
-    /// Logic cần chạy (call, revm, anvil, arbitrage, validate)
-    #[arg(long, default_value = "call")]
-    method: String,
-}
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let args = Args::parse();
-
-    // Load config từ file src/config/<chain>.toml
-    let config_path = format!("src/config/{}.toml", args.chain);
-    let config: ChainConfig = load_chain_config(&config_path)?;
-    let actors = get_chain_actors(&args.chain);
-
-
-    // Dispatch logic dựa theo --method
-    match args.method.as_str() {
-        "call" => run_chain_call(&config, &actors).await?,
-        "anvil" => run_chain_anvil(&config, &actors).await?,
-        "revm" => run_chain_revm(&config, &actors).await?,
-        "revm_cached" => run_chain_revm_cached(&config, &actors).await?,
-        "revm_quoter" => run_chain_revm_quoter(&config, &actors).await?,
-        "arbitrage" => run_chain_arbitrage(&config, &actors).await?,
-        "validate" => run_chain_validate(&config, &actors).await?,
-
-        _ => eprintln!("Unknown method: {}", args.method),
-    }
-
-
-    Ok(())
-}
-
-
-
-==================== src/chain/actors.rs ====================
-pub struct ChainActors {
-    pub native_token_key: &'static str,
-    pub stable_token_key: &'static str,
-    pub quoter_key: &'static str,
-    pub custom_quoter_key: Option<&'static str>,
-    pub pool_500_key: Option<&'static str>,
-    pub pool_3000_key: Option<&'static str>,
-    pub default_fee: u32,
-}
-
-pub fn get_chain_actors(chain_name: &str) -> ChainActors {
-    match chain_name {
-        "eth" => ChainActors {
-            native_token_key: "WETH",
-            stable_token_key: "USDC",
-            quoter_key: "QUOTER",
-            custom_quoter_key: Some("CUSTOM_QUOTER"),
-            pool_500_key: Some("POOL_500"),
-            pool_3000_key: Some("POOL_3000"),
-            default_fee: 3000,
-        },
-        "avax" => ChainActors {
-            native_token_key: "WAVAX",
-            stable_token_key: "USDC",
-            quoter_key: "QUOTER",
-            custom_quoter_key: Some("CUSTOM_QUOTER"), // nếu chưa có thì để None
-            pool_500_key: Some("POOL_500"),
-            pool_3000_key: Some("POOL_3000"),
-            default_fee: 3000, // tùy DEX
-        },
-        "ronin" => ChainActors {
-            native_token_key: "WRON",
-            stable_token_key: "USDC",
-            quoter_key: "QUOTER",
-            custom_quoter_key: Some("CUSTOM_QUOTER"),
-            pool_500_key: Some("POOL_500"),
-            pool_3000_key: Some("POOL_3000"),
-            default_fee: 3000,
-        },
-        _ => panic!("Unknown chain"),
-    }
-}
-
-
-
-==================== src/chain/avax.rs ====================
-use alloy::primitives::{address, Address};
-
-pub static WAVAX_ADDR: Address = address!("B31f66AA3C1e785363F0875A1B74E27b85FD66c7");
-pub static USDC_ADDR: Address = address!("B97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E");
-pub static V3_QUOTER_ADDR: Address = address!("be0F5544EC67e9B3b2D979aaA43f18Fd87E6257F");
-
-pub static ME: Address = address!("0000000000000000000000000000000000000001");
-pub const CHAIN_ID: u64 = 43114;
-
-
-
-==================== src/chain/eth.rs ====================
-use alloy::primitives::{address, Address};
-
-pub static WETH_ADDR: Address = address!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
-pub static USDC_ADDR: Address = address!("a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
-pub static V3_QUOTER_ADDR: Address = address!("61fFE014bA17989E743c5F6cB21bF9697530B21e");
-pub static V3_POOL_500_ADDR: Address = address!("88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640");
-pub static V3_POOL_3000_ADDR: Address = address!("8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8");
-pub static CUSTOM_QUOTER_ADDR: Address = address!("A5C381211A406b48A073E954e6949B0D49506bc0");
-
-pub static ME: Address = address!("0000000000000000000000000000000000000001");
-pub const CHAIN_ID: u64 = 1;
-
-
-
-==================== src/chain/mod.rs ====================
-pub mod eth;
-pub mod avax;
-pub mod ronin;
-pub mod actors;
-
-
-
-==================== src/chain/ronin.rs ====================
-use alloy::primitives::{address, Address};
-
-pub static WETH_ADDR: Address = address!("c99a6A985eD2Cac1ef41640596C5A5f9F4E19Ef5");
-pub static WRON_ADDR: Address = address!("e514d9DEB7966c8BE0ca922de8a064264eA6bcd4");
-pub static V3_QUOTER_ADDR: Address = address!("84ab2f9fdc4bf66312b0819d879437b8749efdf2");
-
-pub static ME: Address = address!("0000000000000000000000000000000000000001");
-pub const CHAIN_ID: u64 = 2021;
-
-
-
 ==================== src/core/chain_anvil.rs ====================
 use std::sync::Arc;
 use std::ops::Div;
@@ -367,7 +91,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use alloy::{
     primitives::{Bytes, U256},
-    providers::ProviderBuilder,
+    providers::{Provider, ProviderBuilder},
 };
 use revm::primitives::Bytecode;
 
@@ -376,15 +100,25 @@ use crate::source::{abi::*, builder::volumes};
 use crate::core::db::*;
 use crate::core::logger::{measure_start, measure_end};
 use crate::chain::actors::ChainActors;
+use crate::core::provider::MultiProvider;
+
 
 /// Mô phỏng back-and-forth arbitrage Native -> Stable -> Native
 /// Dùng custom UniV3Quoter để quote offchain qua REVM
 pub async fn run_chain_arbitrage(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
+    // let provider = ProviderBuilder::new()
+    //     .on_http(config.rpc_url.parse()?);
+    // let provider = Arc::new(provider);
 
-    let mut cache_db = init_cache_db(provider.clone());
+    // let mut cache_db = init_cache_db(provider.clone());
+    let multi_provider = MultiProvider::new(&config.rpc_urls);
+    println!("MultiProvider with {} providers", multi_provider.len());
+
+    // let base_fee = provider.get_gas_price().await?;
+    let provider = multi_provider.next();
+    let base_fee = provider.get_gas_price().await?;
+
+    let mut cache_db = init_cache_db(&multi_provider);
 
     let from = config.addr("ME")?;
     let token_in = config.addr(actors.native_token_key)?;
@@ -464,14 +198,23 @@ use crate::{source::build_tx_avalanche, types::{ChainConfig, ONE_ETHER}};
 use crate::source::{builder::volumes, abi::quote_calldata, builder::build_tx};
 use crate::core::logger::{measure_start, measure_end};
 use crate::chain::actors::ChainActors;
+use crate::core::provider::MultiProvider;
+
 
 /// Mô phỏng quote swap bằng eth_call (multi-chain)
 pub async fn run_chain_call(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
+    // let provider = ProviderBuilder::new()
+    //     .on_http(config.rpc_url.parse()?);
+    // let provider = Arc::new(provider);
+    let multi_provider = MultiProvider::new(&config.rpc_urls);
+    println!("MultiProvider with {} providers", multi_provider.len());
 
+    // let base_fee = provider.get_gas_price().await?;
+    let provider = multi_provider.next();
     let base_fee = provider.get_gas_price().await?;
+
+    let provider = multi_provider.next();
+    let block_number = provider.get_block_number().await?;
     let from = config.addr("ME")?;
     let token_in = config.addr(actors.native_token_key)?;
     let token_out = config.addr(actors.stable_token_key)?;
@@ -524,7 +267,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use alloy::{
     primitives::{Bytes, U256},
-    providers::{ProviderBuilder},
+    providers::{Provider, ProviderBuilder},
 };
 use revm::primitives::Bytecode;
 
@@ -533,18 +276,28 @@ use crate::source::{builder::volumes, abi::*};
 use crate::core::db::*;
 use crate::core::logger::{measure_start, measure_end};
 use crate::chain::actors::ChainActors;
+use crate::core::provider::MultiProvider;
 
 /// REVM mô phỏng UniswapV3 với dữ liệu cache:
 /// - Gán bytecode ERC20 giả cho token
 /// - Thêm balance thủ công vào REVM storage
 pub async fn run_chain_revm_cached(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
     // 1️⃣ Tạo JSON-RPC provider
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
+    // let provider = ProviderBuilder::new()
+    //     .on_http(config.rpc_url.parse()?);
+    // let provider = Arc::new(provider);
 
-    // 2️⃣ Tạo cache db từ REVM memory
-    let mut cache_db = init_cache_db(provider.clone());
+    // // 2️⃣ Tạo cache db từ REVM memory
+    // let mut cache_db = init_cache_db(provider.clone());
+    // let mut cache_db = init_cache_db(provider.clone());
+    let multi_provider = MultiProvider::new(&config.rpc_urls);
+    println!("MultiProvider with {} providers", multi_provider.len());
+
+    // let base_fee = provider.get_gas_price().await?;
+    let provider = multi_provider.next();
+    let base_fee = provider.get_gas_price().await?;
+
+    let mut cache_db = init_cache_db(&multi_provider);
 
     // 3️⃣ Địa chỉ cần dùng
     let from = config.addr("ME")?;
@@ -609,7 +362,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use alloy::{
     primitives::{Bytes, U256},
-    providers::ProviderBuilder,
+    providers::{Provider, ProviderBuilder},
 };
 use revm::primitives::Bytecode;
 
@@ -618,15 +371,24 @@ use crate::source::{builder::volumes, abi::*};
 use crate::core::db::*;
 use crate::core::logger::{measure_start, measure_end};
 use crate::chain::actors::ChainActors;
+use crate::core::provider::MultiProvider;
 
 /// REVM chạy quote bằng custom UniV3Quoter contract (trả kết quả qua revert), multi-chain version
 pub async fn run_chain_revm_quoter(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
     // 1️⃣ Setup provider và cache db
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
+    // let provider = ProviderBuilder::new()
+    //     .on_http(config.rpc_url.parse()?);
+    // let provider = Arc::new(provider);
 
-    let mut cache_db = init_cache_db(provider.clone());
+    // let mut cache_db = init_cache_db(provider.clone());
+    let multi_provider = MultiProvider::new(&config.rpc_urls);
+    println!("MultiProvider with {} providers", multi_provider.len());
+
+    // let base_fee = provider.get_gas_price().await?;
+    let provider = multi_provider.next();
+    let base_fee = provider.get_gas_price().await?;
+
+    let mut cache_db = init_cache_db(&multi_provider);
 
     // 2️⃣ Đọc address từ config
     let from = config.addr("ME")?;
@@ -688,7 +450,7 @@ use std::ops::Div;
 use anyhow::Result;
 use alloy::{
     primitives::U256,
-    providers::{ProviderBuilder, RootProvider},
+    providers::{Provider, ProviderBuilder},
     transports::http::{Http, Client},
 };
 
@@ -697,16 +459,25 @@ use crate::source::{builder::volumes, abi::*};
 use crate::core::db::{init_cache_db, init_account, revm_call};
 use crate::core::logger::{measure_start, measure_end};
 use crate::chain::actors::ChainActors; // cần thêm import
+use crate::core::provider::MultiProvider;
 
 /// Mô phỏng quote swap từ UniswapV3 bằng `REVM` (multi-chain)
 pub async fn run_chain_revm(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
     // 1️⃣ Khởi tạo JSON-RPC provider để fetch bytecode từ chain thực
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
+    // let provider = ProviderBuilder::new()
+    //     .on_http(config.rpc_url.parse()?);
+    // let provider = Arc::new(provider);
 
-    // 2️⃣ Tạo REVM CacheDB từ provider chain thực
-    let mut cache_db = init_cache_db(provider.clone());
+    // // 2️⃣ Tạo REVM CacheDB từ provider chain thực
+    // let mut cache_db = init_cache_db(provider.clone());
+    let multi_provider = MultiProvider::new(&config.rpc_urls);
+    println!("MultiProvider with {} providers", multi_provider.len());
+
+    // let base_fee = provider.get_gas_price().await?;
+    let provider = multi_provider.next();
+    let base_fee = provider.get_gas_price().await?;
+
+    let mut cache_db = init_cache_db(&multi_provider);
 
     // 3️⃣ Địa chỉ dùng trong giao dịch (từ config + actors)
     let from = config.addr("ME")?;
@@ -769,17 +540,26 @@ use crate::source::{builder::volumes, abi::*, builder::build_tx};
 use crate::core::db::*;
 use crate::core::logger::{measure_start, measure_end};
 use crate::chain::actors::ChainActors;
+use crate::core::provider::MultiProvider;
 
 /// So sánh kết quả quote từ `eth_call` và `revm`
 /// Dùng custom UniV3Quoter để đảm bảo REVM phản hồi `amountOut` đúng
 pub async fn run_chain_validate(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
     // 1️⃣ Setup RPC và provider
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
+    // let provider = ProviderBuilder::new()
+    //     .on_http(config.rpc_url.parse()?);
+    // let provider = Arc::new(provider);
 
-    // Tạo REVM cache database từ provider
-    let mut cache_db = init_cache_db(provider.clone());
+    // // Tạo REVM cache database từ provider
+    // let mut cache_db = init_cache_db(provider.clone());
+    let multi_provider = MultiProvider::new(&config.rpc_urls);
+    println!("MultiProvider with {} providers", multi_provider.len());
+
+    // let base_fee = provider.get_gas_price().await?;
+    let provider = multi_provider.next();
+    let base_fee = provider.get_gas_price().await?;
+
+    let mut cache_db = init_cache_db(&multi_provider);
 
     let base_fee = provider.get_gas_price().await?;
     let base_fee = base_fee.mul(110).div(100); // +10%
@@ -854,13 +634,28 @@ use revm::{
     Evm,
 };
 use std::sync::Arc;
+use crate::core::provider::MultiProvider;
 
 pub type AlloyCacheDB =
     CacheDB<AlloyDB<Http<Client>, Ethereum, Arc<RootProvider<Http<Client>>>>>;
 
-pub fn init_cache_db(provider: Arc<RootProvider<Http<Client>>>) -> AlloyCacheDB {
+// pub fn init_cache_db(provider: Arc<RootProvider<Http<Client>>>) -> AlloyCacheDB {
+//     CacheDB::new(AlloyDB::new(provider, Default::default()).unwrap())
+// }
+
+// Hàm init_cache_db của bạn
+// Giờ provider.next() trả về Arc<ConcreteHttpProvider>,
+// mà ConcreteHttpProvider là một kiểu Sized và implements Provider
+// Nên AlloyDB::new có thể chấp nhận nó tùy thuộc vào signature của nó.
+pub fn init_cache_db(multi_provider: &MultiProvider) -> AlloyCacheDB {
+    let provider = multi_provider.next();
+    // Vẫn cần kiểm tra lại signature của AlloyDB::new
+    // Nếu nó cần T: Provider + Sized, thì Arc<ConcreteHttpProvider> là phù hợp.
+    // Nếu nó cần Arc<T: Provider>, thì Arc<ConcreteHttpProvider> cũng phù hợp.
     CacheDB::new(AlloyDB::new(provider, Default::default()).unwrap())
 }
+
+// ... các import và định nghĩa struct/impl khác cho CacheDB, AlloyDB ...
 
 pub async fn init_account(
     address: Address,
@@ -1045,549 +840,56 @@ pub mod chain_arbitrage;
 
 pub mod db;        // chứa init_cache_db, init_account, v.v.
 pub mod logger;    // chứa measure_start, structured log, ...
+pub mod provider; // chứa ProviderBuilder, v.v.
 
 
 
-==================== src/lib.rs ====================
-pub mod source;     // Giữ nguyên: abi encode/decode, builder
-pub mod core;       // Tất cả logic call/revm/arb/validate
-pub mod types;      // Struct ChainConfig, load từ toml
-pub mod chain;
-
-
-==================== src/source/abi.rs ====================
-use alloy::{
-    primitives::{aliases::U24, Address, Bytes, U160, U256},
-    sol,
-    sol_types::{SolCall, SolValue},
-};
-
-use anyhow::Result;
-
-sol! {
-    struct QuoteExactInputSingleParams {
-        address tokenIn;
-        address tokenOut;
-        uint256 amountIn;
-        uint24 fee;
-        uint160 sqrtPriceLimitX96;
-    }
-
-    function quoteExactInputSingle(QuoteExactInputSingleParams memory params)
-    public
-    override
-    returns (
-        uint256 amountOut,
-        uint160 sqrtPriceX96After,
-        uint32 initializedTicksCrossed,
-        uint256 gasEstimate
-    );
-
-}
-
-sol! {
-    function getAmountOut(
-        address pool,
-        bool zeroForOne,
-        uint256 amountIn
-    ) external;
-}
-
-pub fn decode_quote_response(response: Bytes) -> Result<u128> {
-    let (amount_out, _, _, _) = <(u128, u128, u32, u128)>::abi_decode(&response, false)?;
-    Ok(amount_out)
-}
-
-pub fn decode_get_amount_out_response(response: Bytes) -> Result<u128> {
-    let value = response.to_vec();
-    let last_64_bytes = &value[value.len() - 64..];
-
-    let (a, b) = match <(i128, i128)>::abi_decode(last_64_bytes, false) {
-        Ok((a, b)) => (a, b),
-        Err(e) => return Err(anyhow::anyhow!("'getAmountOut' decode failed: {:?}", e)),
-    };
-    let value_out = std::cmp::min(a, b);
-    let value_out = -value_out;
-    Ok(value_out as u128)
-}
-
-pub fn get_amount_out_calldata(
-    pool: Address,
-    token_in: Address,
-    token_out: Address,
-    amount_in: U256,
-) -> Bytes {
-    Bytes::from(
-        getAmountOutCall {
-            pool,
-            zeroForOne: token_in < token_out,
-            amountIn: amount_in,
-        }
-        .abi_encode(),
-    )
-}
-
-pub fn quote_calldata(token_in: Address, token_out: Address, amount_in: U256, fee: u32) -> Bytes {
-    let zero_for_one = token_in < token_out;
-
-    let sqrt_price_limit_x96: U160 = if zero_for_one {
-        "4295128749".parse().unwrap()
-    } else {
-        "1461446703485210103287273052203988822378723970341"
-            .parse()
-            .unwrap()
-    };
-
-    let params = QuoteExactInputSingleParams {
-        tokenIn: token_in,
-        tokenOut: token_out,
-        amountIn: amount_in,
-        fee: U24::from(fee),
-        sqrtPriceLimitX96: sqrt_price_limit_x96,
-    };
-
-    Bytes::from(quoteExactInputSingleCall { params }.abi_encode())
-}
-
-
-
-
-sol! {
-    function quoteExactInput(
-        bytes path,
-        uint256 amountIn
-    )
-    public
-    returns (
-        uint256 amountOut,
-        uint160[] memory sqrtPriceX96AfterList,
-        uint32[] memory initializedTicksCrossedList,
-        uint256 gasEstimate
-    );
-}
-
-pub fn encode_path(tokens: &[Address], fees: &[U24]) -> Bytes {
-    assert!(tokens.len() == fees.len() + 1, "Path length mismatch between tokens and fees");
-
-    let mut path = Vec::new();
-    for i in 0..fees.len() {
-        path.extend_from_slice(tokens[i].as_ref());
-        let fee_bytes: [u8; 3] = fees[i].to_be_bytes::<3>(); // Explicitly specifying size
-        path.extend_from_slice(&fee_bytes);
-    }
-    path.extend_from_slice(tokens.last().unwrap().as_ref());
-    Bytes::from(path)
-}
-
-
-use std::fmt;
-
-pub struct PrettyBytes(pub Bytes);
-
-impl fmt::Display for PrettyBytes {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for byte in self.0.iter() {
-            write!(f, "{:02x} ", byte)?;
-        }
-        Ok(())
-    }
-}
-
-pub fn quote_exact_input_calldata(tokens: &[Address], fees: &[U24], amount_in: U256) -> Bytes {
-    let path = encode_path(tokens, fees);
-    Bytes::from(quoteExactInputCall {
-        path,
-        amountIn: amount_in, }.abi_encode())
-}
-
-pub fn quote_exact_input_single_calldata(
-    token_in: Address,
-    token_out: Address,
-    amount_in: U256,
-    fee: u32,
-) -> Bytes {
-    let path = encode_path(&[token_in, token_out], &[U24::from(fee)]);
-    let pretty = PrettyBytes(path.clone());
-    println!("{}", pretty);
-    let encoded = quoteExactInputCall {
-        path,
-        amountIn: amount_in }.abi_encode();
-    println!("encoded: {:?}", encoded.clone());
-    Bytes::from(encoded)
-}
-
-
-
-==================== src/source/builder.rs ====================
-use alloy::{
-    network::{Ethereum, TransactionBuilder},
-    primitives::{Address, Bytes, U256},
-    providers::{Provider, RootProvider},
-    rpc::types::TransactionRequest,
-    sol_types::SolValue,
-    transports::http::{Client, Http},
-    uint,
-};
-
-
-
-use anyhow::{anyhow, Result};
-use revm::primitives::{keccak256, AccountInfo, Bytecode};
-use revm::{
-    db::{AlloyDB, CacheDB},
-    primitives::{ExecutionResult, Output, TransactTo},
-    Evm,
-};
+==================== src/core/provider.rs ====================
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::time::Instant;
+use alloy::providers::{Provider, ProviderBuilder, RootProvider}; // Import RootProvider
+use alloy::transports::http::{Http, Client};
+use alloy::network::Ethereum; // Vẫn cần Ethereum nếu Provider yêu cầu Network generic
 
+// Định nghĩa kiểu cố định mà `on_http` trả về
+// Đây là kiểu cụ thể, Sized, và implement Provider
+type ConcreteHttpProvider = RootProvider<Http<Client>>;
 
-// use web3::types::H160;
-// use web3::helpers::to_checksum;
-
-// /// Converts a lowercase Ethereum address to a checksummed address (EIP-55).
-// pub fn to_checksum_address(address: &str) -> Result<String, String> {
-//     // Parse the input string into an H160 Ethereum address
-//     match address.parse::<H160>() {
-//         Ok(h160_address) => Ok(to_checksum(&h160_address, None)),
-//         Err(_) => Err("Invalid Ethereum address format".to_string()),
-//     }
-// }
-
-pub fn measure_start(label: &str) -> (String, Instant) {
-    (label.to_string(), Instant::now())
+pub struct MultiProvider {
+    // Lưu trữ các Arc của kiểu cụ thể này
+    providers: Vec<Arc<ConcreteHttpProvider>>,
+    counter: AtomicUsize,
 }
 
-pub fn measure_end(start: (String, Instant)) -> Duration {
-    let elapsed = start.1.elapsed();
-    println!("Elapsed: {:.2?} for '{}'", elapsed, start.0);
-    elapsed
-}
-
-pub fn volumes(from: U256, to: U256, count: usize) -> Vec<U256> {
-    let start = U256::ZERO;
-    let mut volumes = Vec::new();
-    let distance = to - from;
-    let step = distance / U256::from(count);
-
-    for i in 1..(count + 1) {
-        let current = start + step * U256::from(i);
-        volumes.push(current);
+impl MultiProvider {
+    // define len 
+    pub fn len(&self) -> usize {
+        self.providers.len()
     }
 
-    volumes.reverse();
-    volumes
-}
 
-pub fn build_tx(to: Address, from: Address, calldata: Bytes, base_fee: u128) -> TransactionRequest {
-    TransactionRequest::default()
-        .to(to)
-        .from(from)
-        .with_input(calldata)
-        .nonce(0)
-        .gas_limit(1000000)
-        .max_fee_per_gas(base_fee * 12 / 10)
-        .max_priority_fee_per_gas(base_fee / 10)
-        .build_unsigned()
-        .unwrap()
-        .into()
-}
+    pub fn new(urls: &[String]) -> Self {
+        let providers = urls.iter()
+            .map(|url| {
+                let provider = ProviderBuilder::new()
+                    .on_http(url.parse().expect("Invalid RPC URL"));
+                // provider ở đây đã là ConcreteHttpProvider, không cần ép kiểu 'as dyn'
+                Arc::new(provider)
+            })
+            .collect::<Vec<_>>();
 
-pub fn build_tx_avalanche(
-    to: Address, 
-    from: Address, 
-    calldata: Bytes, 
-    base_fee: u128, 
-    chain_id: Option<u64> // Use Option for default handling
-) -> TransactionRequest {
-    // Use chain_id or fallback to Avalanche's default chain ID
-    let chain_id = chain_id.unwrap_or(43114); // Avalanche C-Chain ID
-    
-    TransactionRequest::default()
-        .to(to)
-        .from(from)
-        .with_input(calldata)
-        .nonce(0)
-        .gas_limit(1000000)
-        .max_fee_per_gas(10*base_fee)
-        .max_priority_fee_per_gas(base_fee * 2)
-        .with_chain_id(chain_id) // Use Avalanche's chain ID (43114)
-        .build_unsigned()
-        .unwrap()
-        .into()
-}
+        MultiProvider {
+            providers,
+            counter: AtomicUsize::new(0),
+        }
+    }
 
-pub fn build_tx_ronin(
-    to: Address, 
-    from: Address, 
-    calldata: Bytes, 
-    base_fee: u128, 
-    chain_id: Option<u64> // Use Option for default handling
-) -> TransactionRequest {
-    // Use chain_id or fallback to Avalanche's default chain ID
-    // let chain_id = chain_id.unwrap_or(2020); // Ronin
-    
-    TransactionRequest::default()
-        .to(to)
-        .from(from)
-        .with_input(calldata)
-        .nonce(0)
-        .gas_limit(1_000_000)
-        .max_fee_per_gas(1*base_fee)
-        .max_priority_fee_per_gas(0)
-        // .with_chain_id(chain_id) // Ronin
-        .build_unsigned()
-        .unwrap()
-        .into()
-}
-
-// pub type AlloyCacheDB = CacheDB<AlloyDB<Http<Client>, Ethereum, Arc<RootProvider<Http<Client>>>>>;
-
-// pub fn revm_call(
-//     from: Address,
-//     to: Address,
-//     calldata: Bytes,
-//     cache_db: &mut AlloyCacheDB,
-// ) -> Result<Bytes> {
-//     let mut evm = Evm::builder()
-//         .with_db(cache_db)
-//         .modify_tx_env(|tx| {
-//             tx.caller = from;
-//             tx.transact_to = TransactTo::Call(to);
-//             tx.data = calldata;
-//             tx.value = U256::ZERO;
-//         })
-//         .build();
-
-//     let ref_tx = evm.transact().unwrap();
-//     let result = ref_tx.result;
-
-//     let value = match result {
-//         ExecutionResult::Success {
-//             output: Output::Call(value),
-//             ..
-//         } => value,
-//         result => {
-//             return Err(anyhow!("execution failed: {result:?}"));
-//         }
-//     };
-
-//     Ok(value)
-// }
-
-// pub fn revm_revert(
-//     from: Address,
-//     to: Address,
-//     calldata: Bytes,
-//     cache_db: &mut AlloyCacheDB,
-// ) -> Result<Bytes> {
-//     let mut evm = Evm::builder()
-//         .with_db(cache_db)
-//         .modify_tx_env(|tx| {
-//             tx.caller = from;
-//             tx.transact_to = TransactTo::Call(to);
-//             tx.data = calldata;
-//             tx.value = U256::ZERO;
-//         })
-//         .build();
-//     let ref_tx = evm.transact().unwrap();
-//     let result = ref_tx.result;
-
-//     let value = match result {
-//         ExecutionResult::Revert { output: value, .. } => value,
-//         _ => {
-//             panic!("It should never happen!");
-//         }
-//     };
-
-//     Ok(value)
-// }
-
-// pub fn init_cache_db(provider: Arc<RootProvider<Http<Client>>>) -> AlloyCacheDB {
-//     CacheDB::new(AlloyDB::new(provider, Default::default()).unwrap())
-// }
-
-// pub async fn init_account(
-//     address: Address,
-//     cache_db: &mut AlloyCacheDB,
-//     provider: Arc<RootProvider<Http<Client>>>,
-// ) -> Result<()> {
-//     let cache_key = format!("bytecode-{:?}", address);
-//     let bytecode = match cacache::read(&cache_dir(), cache_key.clone()).await {
-//         Ok(bytecode) => {
-//             let bytecode = Bytes::from(bytecode);
-//             Bytecode::new_raw(bytecode)
-//         }
-//         Err(_e) => {
-//             let bytecode = provider.get_code_at(address).await?;
-//             let bytecode_result = Bytecode::new_raw(bytecode.clone());
-//             let bytecode = bytecode.to_vec();
-//             cacache::write(&cache_dir(), cache_key, bytecode.clone()).await?;
-//             bytecode_result
-//         }
-//     };
-//     let code_hash = bytecode.hash_slow();
-//     let acc_info = AccountInfo {
-//         balance: U256::ZERO,
-//         nonce: 0_u64,
-//         code: Some(bytecode),
-//         code_hash,
-//     };
-//     cache_db.insert_account_info(address, acc_info);
-//     Ok(())
-// }
-
-// pub fn init_account_with_bytecode(
-//     address: Address,
-//     bytecode: Bytecode,
-//     cache_db: &mut AlloyCacheDB,
-// ) -> Result<()> {
-//     let code_hash = bytecode.hash_slow();
-//     let acc_info = AccountInfo {
-//         balance: U256::ZERO,
-//         nonce: 0_u64,
-//         code: Some(bytecode),
-//         code_hash,
-//     };
-
-//     cache_db.insert_account_info(address, acc_info);
-//     Ok(())
-// }
-
-// pub fn insert_mapping_storage_slot(
-//     contract: Address,
-//     slot: U256,
-//     slot_address: Address,
-//     value: U256,
-//     cache_db: &mut AlloyCacheDB,
-// ) -> Result<()> {
-//     let hashed_balance_slot = keccak256((slot_address, slot).abi_encode());
-
-//     cache_db.insert_account_storage(contract, hashed_balance_slot.into(), value)?;
-//     Ok(())
-// }
-
-// fn cache_dir() -> String {
-//     ".evm_cache".to_string()
-// }
-
-
-
-==================== src/source/mod.rs ====================
-pub mod abi;
-pub mod builder;
-
-
-pub use abi::*;
-pub use builder::*;
-
-
-
-==================== src/types.rs ====================
-use std::collections::HashMap;
-use anyhow::{anyhow, Result};
-use serde::Deserialize;
-
-use alloy::{
-    primitives::{Address, U256},
-    uint,
-};
-
-pub static ONE_ETHER: U256 = uint!(1_000_000_000_000_000_000_U256);
-
-/// Struct ánh xạ nội dung từ file `eth.toml`, `avax.toml`, ...
-#[derive(Debug, Deserialize)]
-pub struct ChainConfigRaw {
-    pub chain_id: u64,
-    pub rpc_url: String,
-    pub gas_multiplier: f64,
-    pub tokens: HashMap<String, String>,
-}
-
-/// Struct dùng trong toàn bộ codebase sau khi parse địa chỉ thành `Address`
-#[derive(Debug)]
-pub struct ChainConfig {
-    pub chain_id: u64,
-    pub rpc_url: String,
-    pub gas_multiplier: f64,
-    pub tokens: HashMap<String, Address>,
-}
-
-impl ChainConfig {
-    pub fn addr(&self, key: &str) -> Result<Address> {
-        self.tokens
-            .get(key)
-            .copied()
-            .ok_or_else(|| anyhow!("Missing address for token/key: {}", key))
+    pub fn next(&self) -> Arc<ConcreteHttpProvider> {
+        let index = self.counter.fetch_add(1, Ordering::Relaxed) % self.providers.len();
+        self.providers[index].clone()
     }
 }
 
-/// Load + parse file TOML thành `ChainConfig`
-pub fn load_chain_config(path: &str) -> Result<ChainConfig> {
-    let raw_content = std::fs::read_to_string(path)?;
-    let raw: ChainConfigRaw = toml::from_str(&raw_content)?;
-
-    let mut parsed = HashMap::new();
-    for (k, v) in raw.tokens.iter() {
-        let addr = v.parse::<Address>()
-            .map_err(|e| anyhow!("Invalid address for {}: {}", k, e))?;
-        parsed.insert(k.clone(), addr);
-    }
-
-    Ok(ChainConfig {
-        chain_id: raw.chain_id,
-        rpc_url: raw.rpc_url,
-        gas_multiplier: raw.gas_multiplier,
-        tokens: parsed,
-    })
-}
-
-
-
-==================== src/contracts/uni_v3_quoter.sol ====================
-//SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-interface IUniV3Pool {
-    function swap(
-        address recipient,
-        bool zeroForOne,
-        int256 amountSpecified,
-        uint160 sqrtPriceLimitX96,
-        bytes calldata data
-    ) external returns (int256 amount0, int256 amount1);
-}
-
-contract UniV3Quoter {
-    function uniswapV3SwapCallback(
-        int256 amount0Delta,
-        int256 amount1Delta,
-        bytes calldata _data
-    ) external {
-        revert(string(abi.encode(amount0Delta, amount1Delta)));
-    }
-
-    function getAmountOut(
-        address pool,
-        bool zeroForOne,
-        uint256 amountIn
-    ) external {
-        uint160 sqrtPriceLimitX96 = (
-            zeroForOne
-                ? 4295128749
-                : 1461446703485210103287273052203988822378723970341
-        );
-
-        IUniV3Pool(pool).swap(
-            address(1),
-            zeroForOne,
-            int256(amountIn),
-            sqrtPriceLimitX96,
-            ""
-        );
-    }
-}
 
 
 

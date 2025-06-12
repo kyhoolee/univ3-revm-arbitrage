@@ -2,6 +2,12 @@ chain_id = 2021
 rpc_url = "https://ronin.gateway.tenderly.co/7dNLdBPOaPCaNqVx5pZ10s"
 gas_multiplier = 1.0
 
+rpc_urls = [
+    "https://ronin.gateway.tenderly.co/7dNLdBPOaPCaNqVx5pZ10s",
+    "https://ronin.drpc.org",
+    "https://api.roninchain.com/rpc"
+]
+
 [tokens]
 ME = "0000000000000000000000000000000000000001"
 WETH = "0xc99a6A985eD2Cac1ef41640596C5A5f9F4E19Ef5"

@@ -17,3 +17,4 @@ pub mod chain_arbitrage;
 pub mod db;        // chứa init_cache_db, init_account, v.v.
 pub mod logger;    // chứa measure_start, structured log, ...
 pub mod db_empty;
+pub mod provider; // chứa ProviderBuilder, v.v.

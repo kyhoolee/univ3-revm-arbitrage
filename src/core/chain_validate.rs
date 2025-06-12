@@ -14,17 +14,26 @@ use crate::source::{builder::volumes, abi::*, builder::build_tx};
 use crate::core::db::*;
 use crate::core::logger::{measure_start, measure_end};
 use crate::chain::actors::ChainActors;
+use crate::core::provider::MultiProvider;
 
 /// So sánh kết quả quote từ `eth_call` và `revm`
 /// Dùng custom UniV3Quoter để đảm bảo REVM phản hồi `amountOut` đúng
 pub async fn run_chain_validate(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
     // 1️⃣ Setup RPC và provider
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
+    // let provider = ProviderBuilder::new()
+    //     .on_http(config.rpc_url.parse()?);
+    // let provider = Arc::new(provider);
 
-    // Tạo REVM cache database từ provider
-    let mut cache_db = init_cache_db(provider.clone());
+    // // Tạo REVM cache database từ provider
+    // let mut cache_db = init_cache_db(provider.clone());
+    let multi_provider = MultiProvider::new(&config.rpc_urls);
+    println!("MultiProvider with {} providers", multi_provider.len());
+
+    // let base_fee = provider.get_gas_price().await?;
+    let (provider, url) = multi_provider.next();
+    let base_fee = provider.get_gas_price().await?;
+
+    let mut cache_db = init_cache_db(&multi_provider);
 
     let base_fee = provider.get_gas_price().await?;
     let base_fee = base_fee.mul(110).div(100); // +10%
@@ -40,8 +49,8 @@ pub async fn run_chain_validate(config: &ChainConfig, actors: &ChainActors) -> R
     // 3️⃣ Chuẩn bị volume và mock data
     let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 10);
 
-    init_account(from, &mut cache_db, provider.clone()).await?;
-    init_account(pool, &mut cache_db, provider.clone()).await?;
+    init_account(from, &mut cache_db, &multi_provider).await?;
+    init_account(pool, &mut cache_db, &multi_provider).await?;
 
     let mocked_erc20 = include_str!("../bytecode/generic_erc20.hex");
     let mocked_erc20 = Bytecode::new_raw(Bytes::from_str(mocked_erc20)?);

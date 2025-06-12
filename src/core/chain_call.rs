@@ -10,14 +10,21 @@ use crate::{source::build_tx_avalanche, types::{ChainConfig, ONE_ETHER}};
 use crate::source::{builder::volumes, abi::quote_calldata, builder::build_tx};
 use crate::core::logger::{measure_start, measure_end};
 use crate::chain::actors::ChainActors;
+use crate::core::provider::MultiProvider;
+
 
 /// Mô phỏng quote swap bằng eth_call (multi-chain)
 pub async fn run_chain_call(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
+    // let provider = ProviderBuilder::new()
+    //     .on_http(config.rpc_url.parse()?);
+    // let provider = Arc::new(provider);
+    let multi_provider = MultiProvider::new(&config.rpc_urls);
+    println!("MultiProvider with {} providers", multi_provider.len());
 
+    // let base_fee = provider.get_gas_price().await?;
+    let (provider, _url) = multi_provider.next();
     let base_fee = provider.get_gas_price().await?;
+    let block_number = provider.get_block_number().await?;
     let from = config.addr("ME")?;
     let token_in = config.addr(actors.native_token_key)?;
     let token_out = config.addr(actors.stable_token_key)?;
@@ -42,7 +49,7 @@ pub async fn run_chain_call(config: &ChainConfig, actors: &ChainActors) -> Resul
         // println!("Calling provider with transaction...");
 
         // let response = provider.call(&tx).await?;
-        let response = provider.call(&tx).block(BlockId::latest()).await?;
+        let response = provider.call(&tx).block(block_number.into()).await?;
 
         let amount_out = crate::source::abi::decode_quote_response(response)?;
 

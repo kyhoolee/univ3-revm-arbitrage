@@ -14,6 +14,7 @@ pub static ONE_ETHER: U256 = uint!(1_000_000_000_000_000_000_U256);
 pub struct ChainConfigRaw {
     pub chain_id: u64,
     pub rpc_url: String,
+    pub rpc_urls: Option<Vec<String>>, // NEW
     pub gas_multiplier: f64,
     pub tokens: HashMap<String, String>,
 }
@@ -23,6 +24,7 @@ pub struct ChainConfigRaw {
 pub struct ChainConfig {
     pub chain_id: u64,
     pub rpc_url: String,
+    pub rpc_urls: Vec<String>, // NEW
     pub gas_multiplier: f64,
     pub tokens: HashMap<String, Address>,
 }
@@ -50,7 +52,8 @@ pub fn load_chain_config(path: &str) -> Result<ChainConfig> {
 
     Ok(ChainConfig {
         chain_id: raw.chain_id,
-        rpc_url: raw.rpc_url,
+        rpc_url: raw.rpc_url.clone(),
+        rpc_urls: raw.rpc_urls.unwrap_or_else(|| vec![raw.rpc_url.clone()]),
         gas_multiplier: raw.gas_multiplier,
         tokens: parsed,
     })

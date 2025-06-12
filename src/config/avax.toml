@@ -2,6 +2,13 @@ chain_id = 43114
 rpc_url = "https://api.avax.network/ext/bc/C/rpc"
 gas_multiplier = 10.0
 
+rpc_urls = [
+    "https://api.avax.network/ext/bc/C/rpc",
+    "https://ava-mainnet.public.blastapi.io/ext/bc/C/rpc",
+    "https://avalanche.drpc.org",
+    "https://0xrpc.io/avax"
+]
+
 [tokens]
 ME = "0000000000000000000000000000000000000001"
 WAVAX = "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7"

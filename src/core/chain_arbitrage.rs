@@ -4,7 +4,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use alloy::{
     primitives::{Bytes, U256},
-    providers::ProviderBuilder,
+    providers::{Provider, ProviderBuilder},
 };
 use revm::primitives::Bytecode;
 
@@ -13,15 +13,23 @@ use crate::source::{abi::*, builder::volumes};
 use crate::core::db::*;
 use crate::core::logger::{measure_start, measure_end};
 use crate::chain::actors::ChainActors;
+use crate::core::provider::MultiProvider;
+
 
 /// Mô phỏng back-and-forth arbitrage Native -> Stable -> Native
 /// Dùng custom UniV3Quoter để quote offchain qua REVM
 pub async fn run_chain_arbitrage(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
+    // let provider = ProviderBuilder::new()
+    //     .on_http(config.rpc_url.parse()?);
+    // let provider = Arc::new(provider);
 
-    let mut cache_db = init_cache_db(provider.clone());
+    // let mut cache_db = init_cache_db(provider.clone());
+    let multi_provider = MultiProvider::new(&config.rpc_urls);
+    println!("MultiProvider with {} providers", multi_provider.len());
+
+    // let base_fee = provider.get_gas_price().await?;
+
+    let mut cache_db = init_cache_db(&multi_provider);
 
     let from = config.addr("ME")?;
     let token_in = config.addr(actors.native_token_key)?;
@@ -38,9 +46,9 @@ pub async fn run_chain_arbitrage(config: &ChainConfig, actors: &ChainActors) -> 
     let mocked_quoter = Bytecode::new_raw(Bytes::from_str(mocked_quoter)?);
 
     // Init accounts
-    init_account(from, &mut cache_db, provider.clone()).await?;
-    init_account(pool1, &mut cache_db, provider.clone()).await?;
-    init_account(pool2, &mut cache_db, provider.clone()).await?;
+    init_account(from, &mut cache_db, &multi_provider).await?;
+    init_account(pool1, &mut cache_db, &multi_provider).await?;
+    init_account(pool2, &mut cache_db, &multi_provider).await?;
 
     init_account_with_bytecode(token_in, mocked_erc20.clone(), &mut cache_db)?;
     init_account_with_bytecode(token_out, mocked_erc20.clone(), &mut cache_db)?;

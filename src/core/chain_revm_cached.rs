@@ -4,7 +4,8 @@ use std::str::FromStr;
 use anyhow::Result;
 use alloy::{
     primitives::{Bytes, U256},
-    providers::{Provider, ProviderBuilder, RootProvider}, transports::http::{reqwest, Http},
+    providers::{Provider, ProviderBuilder, RootProvider}, 
+    transports::http::{reqwest, Http}
 };
 use revm::{db::AlloyDB, primitives::{Address, Bytecode}};
 
@@ -22,18 +23,28 @@ use revm::db::{CacheDB, EmptyDB};
 use revm::primitives::{AccountInfo};
 
 
+use crate::core::provider::MultiProvider;
 
 /// REVM mô phỏng UniswapV3 với dữ liệu cache:
 /// - Gán bytecode ERC20 giả cho token
 /// - Thêm balance thủ công vào REVM storage
 pub async fn run_chain_revm_cached(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
     // 1️⃣ Tạo JSON-RPC provider
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
+    // let provider = ProviderBuilder::new()
+    //     .on_http(config.rpc_url.parse()?);
+    // let provider = Arc::new(provider);
 
-    // 2️⃣ Tạo cache db từ REVM memory
-    let mut cache_db = init_cache_db(provider.clone());
+    // // 2️⃣ Tạo cache db từ REVM memory
+    // let mut cache_db = init_cache_db(provider.clone());
+    // let mut cache_db = init_cache_db(provider.clone());
+    let multi_provider = MultiProvider::new(&config.rpc_urls);
+    println!("MultiProvider with {} providers", multi_provider.len());
+
+    // let base_fee = provider.get_gas_price().await?;
+    let (provider, url) = multi_provider.next();
+    let base_fee = provider.get_gas_price().await?;
+
+    let mut cache_db = init_cache_db(&multi_provider);
 
     // 3️⃣ Địa chỉ cần dùng
     let from = config.addr("ME")?;
@@ -49,8 +60,8 @@ pub async fn run_chain_revm_cached(config: &ChainConfig, actors: &ChainActors) -
     let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 1000);
 
     // 5️⃣ Tải bytecode thật cho quoter + pool vào memory state
-    init_account(quoter, &mut cache_db, provider.clone()).await?;
-    init_account(pool, &mut cache_db, provider.clone()).await?;
+    init_account(quoter, &mut cache_db, &multi_provider).await?;
+    init_account(pool, &mut cache_db, &multi_provider).await?;
 
     // 6️⃣ Tải bytecode ERC20 giả
     let mocked_erc20 = include_str!("../bytecode/generic_erc20.hex");
@@ -90,90 +101,6 @@ pub async fn run_chain_revm_cached(config: &ChainConfig, actors: &ChainActors) -
 }
 
 
-
-
-pub async fn run_chain_revm_cached_parallel_v1(config: &ChainConfig, actors: &ChainActors) -> Result<()> {
-    let provider = ProviderBuilder::new()
-        .on_http(config.rpc_url.parse()?);
-    let provider = Arc::new(provider);
-
-    // Shared CacheDB
-    let cache_db = Arc::new(Mutex::new(init_cache_db(provider.clone()))); // CHANGE
-
-    // Init các account như cũ
-    let from = config.addr("ME")?;
-    let token_in = config.addr(actors.native_token_key)?;
-    let token_out = config.addr(actors.stable_token_key)?;
-    let quoter = config.addr(actors.quoter_key)?;
-    let pool = config.addr(actors.pool_3000_key.expect("Missing pool_3000_key for this chain"))?;
-
-    println!("from={:?} token_in={:?} token_out={:?} quoter={:?} pool={:?}", from, token_in, token_out, quoter, pool);
-
-    let volumes = volumes(U256::ZERO, ONE_ETHER.div(U256::from(10)), 100);
-
-    // Init account serial như cũ
-    {
-        let mut db = cache_db.lock().await;
-        init_account(quoter, &mut db, provider.clone()).await?;
-        init_account(pool, &mut db, provider.clone()).await?;
-
-        let mocked_erc20 = include_str!("../bytecode/generic_erc20.hex");
-        let mocked_erc20 = Bytes::from_str(mocked_erc20)?;
-        let mocked_erc20 = Bytecode::new_raw(mocked_erc20);
-
-        init_account_with_bytecode(token_in, mocked_erc20.clone(), &mut db)?;
-        init_account_with_bytecode(token_out, mocked_erc20.clone(), &mut db)?;
-
-        let mocked_balance = U256::MAX / U256::from(2);
-        insert_mapping_storage_slot(token_in, U256::ZERO, pool, mocked_balance, &mut db)?;
-        insert_mapping_storage_slot(token_out, U256::ZERO, pool, mocked_balance, &mut db)?;
-    }
-
-    // First quote (serial)
-    let start = measure_start("revm_cached_parallel_first");
-    {
-        let mut db = cache_db.lock().await;
-
-        let calldata = quote_calldata(token_in, token_out, volumes[0], actors.default_fee);
-        let response = revm_call(from, quoter, calldata, &mut db)?;
-        let amount_out = decode_quote_response(response)?;
-        println!("{} {} -> {} {}", volumes[0], actors.native_token_key, actors.stable_token_key, amount_out);
-    }
-    measure_end(start);
-
-    // Parallel loop
-    let start = measure_start("revm_cached_parallel_loop");
-
-    let mut futs = FuturesUnordered::new();
-
-    for volume in volumes {
-        let db = cache_db.clone();
-        let from = from;
-        let quoter = quoter;
-        let fee = actors.default_fee;
-        let token_in = token_in;
-        let token_out = token_out;
-        let native_token_key = actors.native_token_key;
-        let stable_token_key = actors.stable_token_key;
-
-        futs.push(tokio::spawn(async move {
-            let mut db = db.lock().await;
-            let calldata = quote_calldata(token_in, token_out, volume, fee);
-            let response = revm_call(from, quoter, calldata, &mut db)?;
-            let amount_out = decode_quote_response(response)?;
-            Ok::<(U256, u128), anyhow::Error>((volume, amount_out))
-        }));
-    }
-
-    while let Some(res) = futs.next().await {
-        let (vol, out) = res??;
-        println!("{} {} -> {} {}", vol, actors.native_token_key, actors.stable_token_key, out);
-    }
-
-    measure_end(start);
-
-    Ok(())
-}
 
 
 
